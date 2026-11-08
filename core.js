@@ -19,22 +19,32 @@ function terminalWin(g){if(g.in_checkmate())return g.turn()==="w"?0:100;return 5
 function classify(drop){return drop>=15?3:drop>=10?2:drop>=5?1:0}
 const MARK=["","?!","?","??"];
 /* analyzeGame: src = {sans|pgn, me, meta}, engine.eval(fen,{depth}) -> {best,cp,mate}; onProg(i,n) */
-async function analyzeGame(src,engine,depth,onProg){
+/* pvLine: UCI-Variante -> SAN mit Zugnummern, max. n Halbzüge */
+function pvLine(fen,uci,n=10){if(!uci||!uci.length)return"";const g=new Chess(fen);let num=+fen.split(" ")[5]||1;const out=[];
+ for(const u of uci.slice(0,n)){const w=g.turn()==="w";const m=g.move({from:u.slice(0,2),to:u.slice(2,4),promotion:u[4]||"q"});if(!m)break;
+  if(w)out.push(num+". "+m.san);else{out.push(out.length?m.san:num+"… "+m.san);num++}}return out.join(" ")}
+/* analyzeGame: deep = Tiefe für die Nachrechnung von Fehlern/Patzern (optional), engine.eval liefert optional pv (UCI-Liste) */
+async function analyzeGame(src,engine,depth,onProg,deep){
  const g=new Chess();let hdr={};
  if(src.pgn){if(!g.load_pgn(src.pgn,{sloppy:true}))throw new Error("PGN nicht lesbar");hdr=g.header()}
  else{for(const s of src.sans)g.move(s,{sloppy:true})}
  const hist=g.history({verbose:true});const start=hdr.FEN||"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
  const b=new Chess(start);const fens=[b.fen()];for(const m of hist){b.move(m);fens.push(b.fen())}
- const W=[],best=[],mateFor=[];
- for(let i=0;i<fens.length;i++){onProg&&onProg(i,fens.length);const t=new Chess(fens[i]);
-  if(t.game_over()){W.push(terminalWin(t));best.push(null);mateFor.push(0);continue}
-  const ev=await engine.eval(fens[i],{depth});W.push(whiteWin(fens[i],ev));best.push(ev.best);mateFor.push(ev.mate||0)}
+ const W=[],best=[],mateFor=[],pvs=[];
+ const evalAt=async(i,d)=>{const t=new Chess(fens[i]);
+  if(t.game_over()){W[i]=terminalWin(t);best[i]=null;mateFor[i]=0;pvs[i]=null;return}
+  const ev=await engine.eval(fens[i],{depth:d});W[i]=whiteWin(fens[i],ev);best[i]=ev.best;mateFor[i]=ev.mate||0;pvs[i]=ev.pv||(ev.best?[ev.best]:null)};
+ for(let i=0;i<fens.length;i++){onProg&&onProg(i,fens.length);await evalAt(i,depth)}
+ const dropAt=i=>{const m=hist[i],wb=m.color==="w"?W[i]:100-W[i],wa=m.color==="w"?W[i+1]:100-W[i+1];
+  return best[i]&&best[i].slice(0,4)===m.from+m.to?0:Math.max(0,wb-wa)};
+ // Fehler/Patzer tiefer nachrechnen (Horizont-Effekt): Stellung vor und nach dem Zug
+ if(deep>depth){const re=new Set();for(let i=0;i<hist.length;i++)if(classify(dropAt(i))>=2){re.add(i);re.add(i+1)}
+  const L=[...re].sort((a,b)=>a-b);for(let k=0;k<L.length;k++){onProg&&onProg(k,L.length,"deep");await evalAt(L[k],deep)}}
  const me=src.me;const clocks=src.pgn?parseClocks(src.pgn):[];const base=baseTime(hdr.TimeControl||src.meta&&src.meta.tc);
  const cls=[],accMe=[],accOp=[],ph={o:[],m:[],e:[]},mot={},cards=[];const add=k=>mot[k]=(mot[k]||0)+1;
  let flags={},moved=new Set(),castled=false,myN=0;
  for(let i=0;i<hist.length;i++){const m=hist[i],mover=m.color,isMe=mover===me;
-  const wb=mover==="w"?W[i]:100-W[i],wa=mover==="w"?W[i+1]:100-W[i+1];
-  const played=m.from+m.to+(m.promotion||"");let drop=best[i]&&best[i].slice(0,4)===played.slice(0,4)?0:Math.max(0,wb-wa);
+  const wb=mover==="w"?W[i]:100-W[i];const drop=dropAt(i);
   const c=classify(drop);cls.push(c);(isMe?accMe:accOp).push(moveAcc(drop));if(!isMe)continue;
   myN++;const phase=myN<=10?"o":npm(fens[i+1])<=26?"e":"m";ph[phase].push(moveAcc(drop));
   if(c>=2){const bm=uciToMove(fens[i],best[i]);const reply=best[i+1]?uciToMove(fens[i+1],best[i+1]):null;let motif;
@@ -45,7 +55,7 @@ async function analyzeGame(src,engine,depth,onProg){
    else motif="Positionsfehler";
    add(motif);
    const clk=clocks[i];if(base&&clk!=null&&clk<Math.max(15,base*.1))add("Zeitnot");
-   if(bm)cards.push({fen:fens[i],best:bm.san,played:m.san,motif,wb:Math.round(wb),ply:i});}
+   if(bm)cards.push({fen:fens[i],best:bm.san,played:m.san,motif,wb:Math.round(wb),ply:i,line:pvLine(fens[i],pvs[i])});}
   if(m.piece==="q"&&myN<=5&&!flags.q){flags.q=1;add("Dame zu früh")}
   if("nb".includes(m.piece)&&myN<=8&&!m.captured&&moved.has(m.from)&&!flags.d){flags.d=1;add("Figur doppelt gezogen")}
   moved.delete(m.from);moved.add(m.to);if(m.flags.includes("k")||m.flags.includes("q"))castled=true;
@@ -53,7 +63,9 @@ async function analyzeGame(src,engine,depth,onProg){
  const r=hdr.Result||src.result||"*";const res=r==="1-0"?(me==="w"?1:0):r==="0-1"?(me==="b"?1:0):r==="1/2-1/2"?.5:(src.res??null);
  const op=openingFromUrl(hdr.ECOUrl);
  const phA={};for(const k in ph)phA[k]=ph[k].length?Math.round(mean(ph[k])):null;
- return{sans:hist.map(m=>m.san),start:start,W:W.map(x=>Math.round(x)),best,cls,me,res,
+ // Varianten nur rund um Ungenauigkeiten speichern (Speicherplatz): Bestfortsetzung vor dem Zug, Widerlegung danach
+ const pv=fens.map((f,i)=>cls[i]>=1||(i>0&&cls[i-1]>=1)?pvLine(f,pvs[i])||null:null);
+ return{sans:hist.map(m=>m.san),start:start,W:W.map(x=>Math.round(x)),best,cls,pv,me,res,
   acc:accMe.length?Math.round(mean(accMe)):null,accOpp:accOp.length?Math.round(mean(accOp)):null,ph:phA,mot,cards,
   white:hdr.White||src.meta?.white||"",black:hdr.Black||src.meta?.black||"",wElo:+hdr.WhiteElo||null,bElo:+hdr.BlackElo||null,
   date:(hdr.UTCDate||hdr.Date||"").replace(/\./g,"-"),tc:hdr.TimeControl||"",opening:op?op.name:null,family:op?op.family:null,eco:hdr.ECO||null,link:hdr.Link||null}}
@@ -63,4 +75,4 @@ function weaknesses(games){const rec=games.slice(-20);if(!rec.length)return[];co
 function phaseAcc(games){const rec=games.slice(-20),o={};for(const k of["o","m","e"]){const v=rec.map(g=>g.ph[k]).filter(x=>x!=null);o[k]=v.length?Math.round(mean(v)):null}return o}
 function openingStats(games){const o={w:{},b:{}};for(const g of games){if(!g.family||g.res==null)continue;const t=o[g.me][g.family]||(o[g.me][g.family]={n:0,pts:0,acc:[]});t.n++;t.pts+=g.res;if(g.acc!=null)t.acc.push(g.acc)}
  const f=x=>Object.entries(x).map(([k,v])=>({name:k,n:v.n,score:Math.round(100*v.pts/v.n),acc:v.acc.length?Math.round(mean(v.acc)):null})).sort((a,b)=>b.n-a.n);return{w:f(o.w),b:f(o.b)}}
-if(typeof module!=="undefined")module.exports={analyzeGame,openingFromUrl,parseClocks,weaknesses,phaseAcc,openingStats,winPct,moveAcc,classify};
+if(typeof module!=="undefined")module.exports={analyzeGame,pvLine,baseTime,openingFromUrl,parseClocks,weaknesses,phaseAcc,openingStats,winPct,moveAcc,classify};

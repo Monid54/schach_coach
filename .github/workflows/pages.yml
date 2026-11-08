@@ -23,6 +23,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Tests
+        run: node --test test/core.test.js
+
       - name: Cache-Version in sw.js setzen
         run: |
           sed -i -E "s/const V=\"schachcoach-[^\"]*\"/const V=\"schachcoach-${GITHUB_SHA::7}\"/" sw.js

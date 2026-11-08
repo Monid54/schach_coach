@@ -14,5 +14,8 @@ Persönlicher Schachtrainer als iPhone-Web-App: Chess.com-Sync, Analyse mit Stoc
 Geänderte Dateien auf `main` pushen. Die Action `.github/workflows/pages.yml` deployt automatisch und setzt die Cache-Version in `sw.js` auf den Commit-Hash. App zweimal öffnen.
 Voraussetzung: Settings → Pages → Source: **GitHub Actions**.
 
+## Tests
+`node --test test/core.test.js` – prüft den Analyse-Kern (`core.js`). Läuft automatisch bei jedem Push; schlägt ein Test fehl, wird nicht deployt.
+
 ## Lizenzen
 Stockfish (GPLv3, `engine/LICENSE-stockfish.txt`), chess.js (BSD, `vendor/LICENSE-chessjs.txt`). Wegen GPL muss das Repo öffentlich bleiben oder der Quellcode anderweitig verfügbar sein.
