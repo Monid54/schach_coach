@@ -62,7 +62,7 @@ input[type=text]{font-weight:400;min-width:0;flex:1 1 100%;background:var(--surf
 button.btn{cursor:pointer;color:var(--accent);font-weight:600;-webkit-tap-highlight-color:transparent;transition:opacity .15s}
 button.btn:active{opacity:.6}
 button.btn.pri{background:var(--accent);color:var(--accent-ink)}
-.row button.btn[aria-label]{min-width:52px;font-size:15px}
+.btn.ib{min-width:52px;display:inline-grid;place-items:center;padding:0 14px}
 button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid var(--accent-soft);outline-offset:2px}
 .status{font:600 20px/1.25 -apple-system,"SF Pro Display",sans-serif;letter-spacing:-.015em}
 .fb{border-radius:var(--r);padding:12px 14px;background:var(--surface);min-height:48px;white-space:pre-line;font-size:15px;line-height:1.45;box-shadow:var(--shadow)}
@@ -87,6 +87,47 @@ td.n{text-align:right;font-variant-numeric:tabular-nums}
 .gitem:last-child{border-bottom:0}
 .gitem.on{background:var(--accent-soft)}
 [hidden]{display:none!important}
+.ic{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}.ic.f{fill:currentColor;stroke:none}.ic .dot{fill:currentColor;stroke:none}
+.btn .ic.f{width:14px;height:14px;margin:-2px 6px 0 0;vertical-align:middle}
+.noscroll{overflow:hidden}
+.checks{list-style:none;margin:16px 0 0;padding:0}
+.checks li{display:flex;gap:12px;align-items:center;padding:11px 0;border-top:.5px solid var(--line);font-size:16px}
+.cbox{flex:none;width:24px;height:24px;border-radius:50%;box-shadow:inset 0 0 0 1.8px var(--line);display:grid;place-items:center;color:var(--accent-ink)}
+.checks li.ok .cbox{background:var(--accent);box-shadow:none}.cbox .ic{width:15px;height:15px;stroke-width:2.8}
+.checks li.ok>span:last-child{color:var(--muted)}
+.focus{margin-top:12px;background:var(--accent-soft);border-radius:12px;padding:11px 14px;font-size:15px;white-space:pre-line}
+.wk{border-top:.5px solid var(--line)}.wk:first-of-type{border-top:0}
+.wkh{display:grid;grid-template-columns:minmax(0,140px) 1fr 30px 18px;gap:10px;align-items:center;width:100%;padding:11px 0;background:none;border:0;font:inherit;font-size:15px;color:var(--text);text-align:left;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.wkh .tr{display:block;background:var(--fill);border-radius:4px}.wkh i{display:block;height:8px;background:var(--accent);border-radius:4px}.wkh .n{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+.chev{width:16px;height:16px;color:var(--muted);transition:transform .2s}.wk.open .wkh .chev{transform:rotate(90deg)}
+.wkb{padding:0 0 12px;font-size:15px}.wkb p{margin:0 0 10px}.tipb{background:var(--fill);border-radius:10px;padding:9px 12px}
+.mi{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:var(--fill);border:0;border-radius:12px;padding:10px 12px;margin:0 0 6px;font:inherit;font-size:15px;color:var(--text);cursor:pointer}
+.mi span{flex:1;color:var(--muted);font-size:14px;min-width:0}.mi b{font-weight:600;white-space:nowrap}
+.sh{display:flex;align-items:center;justify-content:space-between}.sh h2{margin:0}
+.infob{border:0;background:none;color:var(--accent);padding:4px;margin:-6px -6px -6px 0;cursor:pointer;display:grid}.infob .ic{width:24px;height:24px;stroke-width:1.7}
+.spark{width:100%;height:auto;display:block;overflow:visible}.spark text{font:500 11px -apple-system,sans-serif;fill:var(--muted)}
+.legend{display:flex;gap:16px;font-size:13px;color:var(--muted);margin-top:8px}.legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:0}
+.otab td{padding:0;vertical-align:middle}.otab .lnk,.otab .om{font:inherit;font-size:15px;background:none;border:0;padding:8px 3px;cursor:pointer;color:var(--text);width:100%;text-align:inherit}
+.otab .lnk{color:var(--accent);font-weight:500;text-align:left}.otab .om{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.sheet{position:fixed;inset:0;z-index:20;display:flex;align-items:flex-end;justify-content:center}
+.sheet-bg{position:absolute;inset:0;background:rgba(45,28,18,.35);animation:fade .2s}
+.sheet-card{position:relative;width:100%;max-width:560px;max-height:92vh;overflow:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;background:var(--bg);border-radius:16px 16px 0 0;padding:8px 18px calc(28px + env(safe-area-inset-bottom,0px));animation:up .28s cubic-bezier(.2,.8,.2,1)}
+.sheet-card::before{content:"";display:block;width:36px;height:5px;border-radius:3px;background:var(--line);margin:0 auto 6px}
+.sheet-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:4px 0 6px}
+.sheet-head h3{font:700 22px/1.2 -apple-system,"SF Pro Display",sans-serif;margin:0;letter-spacing:-.015em}
+.sheet-x{flex:none;width:30px;height:30px;border-radius:50%;border:0;background:var(--fill);color:var(--muted);display:grid;place-items:center;cursor:pointer}.sheet-x .ic{width:16px;height:16px;stroke-width:2.4}
+#shbody>p{font-size:16px;line-height:1.45}
+@keyframes up{from{transform:translateY(100%)}}@keyframes fade{from{opacity:0}}
+.bwrap.sbw{max-width:none;margin:12px 0 4px}
+.seg{display:flex;background:var(--fill);border-radius:9px;padding:2px;margin:12px 0 0}
+.seg button{flex:1;border:0;background:none;padding:7px;border-radius:7px;font:500 14px -apple-system,sans-serif;color:var(--text);cursor:pointer}
+.seg button.on{background:var(--surface);box-shadow:0 1px 3px rgba(60,40,30,.15);font-weight:600}
+.pros{list-style:none;margin:6px 0 0;padding:0}.pros li{display:flex;gap:10px;align-items:flex-start;padding:5px 0;font-size:15px}
+.pi{flex:none;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;margin-top:-1px}.pi .ic{width:14px;height:14px;stroke-width:2.6}
+.pi.good{background:var(--good-soft);color:var(--good)}.pi.bad{background:var(--bad-soft);color:var(--bad)}
+.og{background:var(--surface);border-radius:14px;padding:12px;margin:0 0 10px;box-shadow:var(--shadow)}.ogh{display:flex;gap:12px;align-items:center;margin-bottom:8px}
+.doc p{font-size:15px;line-height:1.5;margin:0 0 12px}.doc .fx{background:var(--surface);border-radius:12px;padding:12px 14px;font:500 15px ui-monospace,"SF Mono",Menlo,monospace;box-shadow:var(--shadow);overflow-x:auto}
+
 .chips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding:2px 0 4px;margin:0 -16px;padding-left:16px;padding-right:16px}
 .chips::-webkit-scrollbar{display:none}
 .chip{flex:none;border:0;border-radius:999px;padding:7px 14px;font:500 15px -apple-system,sans-serif;background:var(--fill);color:var(--text);cursor:pointer;-webkit-tap-highlight-color:transparent}
@@ -119,7 +160,7 @@ label.muted{display:flex;flex-direction:column;gap:4px;font-size:13px}
 
 <div class="view" id="v-review"><div class="two">
  <div class="panel"><div class="bwrap"><div id="rboard" class="board"></div><svg class="arrows" id="rarrows" viewBox="0 0 8 8"></svg></div>
-  <div class="row"><button class="btn" id="rfirst" aria-label="Anfang">⏮</button><button class="btn" id="rprev" aria-label="Zurück">◀</button><button class="btn" id="rnext" aria-label="Vor">▶</button><button class="btn" id="rlast" aria-label="Ende">⏭</button><span class="muted" id="rply"></span></div>
+  <div class="row"><button class="btn ib" id="rfirst" aria-label="Anfang"><svg viewBox="0 0 24 24" class="ic"><path d="M17 5l-7 7 7 7M7 5v14"/></svg></button><button class="btn ib" id="rprev" aria-label="Zurück"><svg viewBox="0 0 24 24" class="ic"><path d="M15 5l-7 7 7 7"/></svg></button><button class="btn ib" id="rnext" aria-label="Vor"><svg viewBox="0 0 24 24" class="ic"><path d="M9 5l7 7-7 7"/></svg></button><button class="btn ib" id="rlast" aria-label="Ende"><svg viewBox="0 0 24 24" class="ic"><path d="M7 5l7 7-7 7M17 5v14"/></svg></button><span class="muted" id="rply"></span></div>
   <svg class="graph" id="rgraph" viewBox="0 0 300 100" preserveAspectRatio="none"></svg>
  </div>
  <div class="panel">
@@ -173,8 +214,9 @@ label.muted{display:flex;flex-direction:column;gap:4px;font-size:13px}
  <p class="muted" id="sinfo"></p>
 </div></div>
 </main>
+<div class="sheet" id="sheet" hidden><div class="sheet-bg"></div><div class="sheet-card" role="dialog" aria-modal="true" aria-labelledby="shtitle"><div class="sheet-head"><h3 id="shtitle"></h3><button class="sheet-x" id="shclose" aria-label="Schliessen"></button></div><div id="shbody"></div></div></div>
 <nav class="tabs" role="tablist">
- <button data-v="today" aria-selected="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 10.5 12 4l8.5 6.5V19a1 1 0 0 1-1 1H15v-5.5H9V20H4.5a1 1 0 0 1-1-1z"/></svg>Heute</button>
+ <button data-v="today" aria-selected="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5v4.2M9.9 4.6h4.2"/><path d="M7.6 17.5 6 12.2a2.6 2.6 0 0 1 4.2-2.8L12 11l1.8-1.6a2.6 2.6 0 0 1 4.2 2.8l-1.6 5.3z"/><path d="M6.5 20.5h11a.5.5 0 0 0 .5-.5v-.5a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v.5a.5.5 0 0 0 .5.5z"/></svg>Home</button>
  <button data-v="review" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v16h16"/><path d="m7.5 14.5 3.5-4 3 2.5 5-6"/></svg>Review</button>
  <button data-v="puz" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.8 10.6c.6.5.8 1.2.8 2.4h6c0-1.2.2-1.9.8-2.4A6 6 0 0 0 12 3z"/></svg>Puzzles</button>
  <button data-v="play" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m10 8.5 5.5 3.5-5.5 3.5z"/></svg>Spielen</button>
@@ -182,6 +224,7 @@ label.muted{display:flex;flex-direction:column;gap:4px;font-size:13px}
 </nav>
 <script src="vendor/chess.js"></script>
 <script src="core.js"></script>
+<script src="openings.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

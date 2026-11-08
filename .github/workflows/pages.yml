@@ -37,7 +37,7 @@ jobs:
       - name: Site zusammenstellen
         run: |
           mkdir _site
-          cp -r index.html app.js core.js sw.js manifest.webmanifest engine vendor icons _site/
+          cp -r index.html app.js core.js openings.js sw.js manifest.webmanifest engine vendor icons _site/
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

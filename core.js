@@ -41,7 +41,7 @@ async function analyzeGame(src,engine,depth,onProg,deep){
  if(deep>depth){const re=new Set();for(let i=0;i<hist.length;i++)if(classify(dropAt(i))>=2){re.add(i);re.add(i+1)}
   const L=[...re].sort((a,b)=>a-b);for(let k=0;k<L.length;k++){onProg&&onProg(k,L.length,"deep");await evalAt(L[k],deep)}}
  const me=src.me;const clocks=src.pgn?parseClocks(src.pgn):[];const base=baseTime(hdr.TimeControl||src.meta&&src.meta.tc);
- const cls=[],accMe=[],accOp=[],ph={o:[],m:[],e:[]},mot={},cards=[];const add=k=>mot[k]=(mot[k]||0)+1;
+ const cls=[],accMe=[],accOp=[],ph={o:[],m:[],e:[]},mot={},cards=[];const ex=[];const add=(k,i)=>{mot[k]=(mot[k]||0)+1;ex.push({m:k,ply:i})};
  let flags={},moved=new Set(),castled=false,myN=0;
  for(let i=0;i<hist.length;i++){const m=hist[i],mover=m.color,isMe=mover===me;
   const wb=mover==="w"?W[i]:100-W[i];const drop=dropAt(i);
@@ -53,20 +53,20 @@ async function analyzeGame(src,engine,depth,onProg,deep){
    else if(reply&&reply.captured&&VAL[reply.captured]>=3&&VAL[reply.captured]>(m.captured?VAL[m.captured]:0))motif="Figur eingestellt";
    else if(bm&&bm.captured&&VAL[bm.captured]>=3&&!m.captured)motif="Schlagchance verpasst";
    else motif="Positionsfehler";
-   add(motif);
-   const clk=clocks[i];if(base&&clk!=null&&clk<Math.max(15,base*.1))add("Zeitnot");
+   add(motif,i);
+   const clk=clocks[i];if(base&&clk!=null&&clk<Math.max(15,base*.1))add("Zeitnot",i);
    if(bm)cards.push({fen:fens[i],best:bm.san,played:m.san,motif,wb:Math.round(wb),ply:i,line:pvLine(fens[i],pvs[i])});}
-  if(m.piece==="q"&&myN<=5&&!flags.q){flags.q=1;add("Dame zu früh")}
-  if("nb".includes(m.piece)&&myN<=8&&!m.captured&&moved.has(m.from)&&!flags.d){flags.d=1;add("Figur doppelt gezogen")}
+  if(m.piece==="q"&&myN<=5&&!flags.q){flags.q=1;add("Dame zu früh",i)}
+  if("nb".includes(m.piece)&&myN<=8&&!m.captured&&moved.has(m.from)&&!flags.d){flags.d=1;add("Figur doppelt gezogen",i)}
   moved.delete(m.from);moved.add(m.to);if(m.flags.includes("k")||m.flags.includes("q"))castled=true;
-  if(myN===12&&!castled&&!flags.c){const k=new Chess(fens[i+1]).get(me==="w"?"e1":"e8");if(k&&k.type==="k"){flags.c=1;add("Nicht rochiert")}}}
+  if(myN===12&&!castled&&!flags.c){const k=new Chess(fens[i+1]).get(me==="w"?"e1":"e8");if(k&&k.type==="k"){flags.c=1;add("Nicht rochiert",i)}}}
  const r=hdr.Result||src.result||"*";const res=r==="1-0"?(me==="w"?1:0):r==="0-1"?(me==="b"?1:0):r==="1/2-1/2"?.5:(src.res??null);
  const op=openingFromUrl(hdr.ECOUrl);
  const phA={};for(const k in ph)phA[k]=ph[k].length?Math.round(mean(ph[k])):null;
  // Varianten nur rund um Ungenauigkeiten speichern (Speicherplatz): Bestfortsetzung vor dem Zug, Widerlegung danach
  const pv=fens.map((f,i)=>cls[i]>=1||(i>0&&cls[i-1]>=1)?pvLine(f,pvs[i])||null:null);
  return{sans:hist.map(m=>m.san),start:start,W:W.map(x=>Math.round(x)),best,cls,pv,me,res,
-  acc:accMe.length?Math.round(mean(accMe)):null,accOpp:accOp.length?Math.round(mean(accOp)):null,ph:phA,mot,cards,
+  acc:accMe.length?Math.round(mean(accMe)):null,accOpp:accOp.length?Math.round(mean(accOp)):null,ph:phA,mot,ex,cards,
   white:hdr.White||src.meta?.white||"",black:hdr.Black||src.meta?.black||"",wElo:+hdr.WhiteElo||null,bElo:+hdr.BlackElo||null,
   date:(hdr.UTCDate||hdr.Date||"").replace(/\./g,"-"),tc:hdr.TimeControl||"",opening:op?op.name:null,family:op?op.family:null,eco:hdr.ECO||null,link:hdr.Link||null}}
 /* Aggregation */
