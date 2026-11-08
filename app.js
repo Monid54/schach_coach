@@ -17,7 +17,7 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const KEY="schachcoach2";
 const DEEP=18; // Tiefe für die Nachrechnung von Fehlern und Patzern
 function load(){try{const r=localStorage.getItem(KEY);if(r)return Object.assign(def(),JSON.parse(r))}catch(e){}return def()}
-function def(){return{user:"",per:5,depth:12,lastSync:0,games:[],queue:[],cards:[],days:{},level:3,seen:{}}}
+function def(){return{user:"",per:5,depth:12,lastSync:0,games:[],queue:[],cards:[],days:{},level:3,seen:{},newDay:15}}
 const S=load();
 function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){if(S.games.length>50){S.games.splice(0,20);save()}}}
 function day(){const t=today();return S.days[t]||(S.days[t]={g:0,r:0,rev:0})}
@@ -58,7 +58,7 @@ function uciArrow(uci,c){return uci&&uci.length>=4?{from:uci.slice(0,2),to:uci.s
 // ---------- UI-Rahmen ----------
 function banner(t){const b=$("#banner");b.textContent=t||"";b.classList.toggle("on",!!t)}
 let VIEW="today";
-function show(v){VIEW=v;document.querySelectorAll("nav.tabs button").forEach(b=>b.setAttribute("aria-selected",b.dataset.v===v));
+function show(v){VIEW=v;if(v!=="puz")AHEAD=false;document.querySelectorAll("nav.tabs button").forEach(b=>b.setAttribute("aria-selected",b.dataset.v===v));
  document.querySelectorAll(".view").forEach(x=>x.classList.toggle("on",x.id==="v-"+v));
  if(v==="today")renderDash();if(v==="review")renderReview();if(v==="puz"&&(!Z.c||Z.done))nextCard();if(v==="set")renderSet();if(v==="play")renderPlay()}
 document.querySelectorAll("nav.tabs button").forEach(b=>b.onclick=()=>show(b.dataset.v));
@@ -98,7 +98,14 @@ async function processQueue(){if(working)return;working=true;
 
 // ---------- Heute ----------
 function streak(){let n=0;const d=new Date();for(;;){const k=ymd(d),x=S.days[k];if(x&&(x.g||x.r||x.rev))n++;else if(n>0||k!==today())break;d.setDate(d.getDate()-1)}return n}
-const dueCards=()=>S.cards.filter(c=>c.due<=today());
+// Neue Karten (noch nie geübt) nur bis zum Tageslimit, Wiederholungen immer
+const isNew=c=>!c.rev&&!c.ivl;const byDue=(a,b)=>a.due<b.due?-1:a.due>b.due?1:0;
+function dueCards(){const t=today(),due=S.cards.filter(c=>c.due<=t);const nw=due.filter(isNew).sort(byDue);
+ return due.filter(c=>!isNew(c)).concat(nw.slice(0,Math.max(0,S.newDay-(day().nw||0))))}
+// Vorausüben: alles noch nicht Fällige, heute nicht schon Geübte, früheste zuerst
+function aheadCards(){const d=new Set(dueCards()),t=today();return S.cards.filter(c=>!d.has(c)&&c.last!==t).sort(byDue)}
+const fmtD=s=>s.split("-").reverse().join(".");
+let AHEAD=false;
 function exportText(){const g=S.games,rec=g.slice(-20),w=weaknesses(g),p=phaseAcc(g),o=openingStats(g);
  const W=rec.filter(x=>x.res===1).length,D=rec.filter(x=>x.res===.5).length,L=rec.filter(x=>x.res===0).length,acc=rec.filter(x=>x.acc!=null);
  const elo=[...g].reverse().find(x=>x.src==="chesscom");const myElo=elo?(elo.me==="w"?elo.wElo:elo.bElo):null;
@@ -202,10 +209,12 @@ $("#pnew").onclick=pNew;$("#presign").onclick=()=>{if(P&&!P.over)finish(0,"Aufge
 
 // ---------- Puzzles ----------
 let Z={c:null};
-function nextCard(){const d=dueCards();Z={c:d[0]||null,g:null,done:false,sel:null,arrow:null,last:null};
+function nextCard(){let d=dueCards(),ahead=false;if(!d.length&&AHEAD){d=aheadCards();ahead=true}
+ Z={c:d[0]||null,g:null,done:false,sel:null,arrow:null,last:null};const rest=aheadCards();$("#zahead").hidden=!!Z.c||!rest.length;
  if(!Z.c){$("#zstatus").textContent=S.cards.length?"Heute nichts mehr fällig":"Noch keine Fehlerstellungen";$("#zfb").className="fb";
-  $("#zfb").textContent=S.cards.length?`${S.cards.length} Stellungen im Stapel, nächste am ${S.cards.map(c=>c.due).sort()[0]}.`:"Analysierte Partien liefern Stellungen ab dem Folgetag.";drawBoard("zboard",new Chess(),"w",{});return}
- Z.g=new Chess(Z.c.fen);$("#zstatus").textContent=`Finde den besten Zug für ${Z.g.turn()==="w"?"Weiss":"Schwarz"} · ${d.length} fällig`;
+  const t=today(),wait=S.cards.filter(c=>isNew(c)&&c.due<=t).length,fut=S.cards.filter(c=>c.due>t).map(c=>c.due).sort()[0];
+  $("#zfb").textContent=S.cards.length?`${S.cards.length} Stellungen im Stapel.${wait?` ${wait} neue warten (Tageslimit ${S.newDay}).`:""}${fut?` Nächste fällig am ${fmtD(fut)}.`:""}${rest.length?" Mit «Trotzdem üben» kannst du vorausarbeiten.":""}`:"Analysierte Partien liefern Stellungen ab dem Folgetag.";drawBoard("zboard",new Chess(),"w",{});return}
+ Z.g=new Chess(Z.c.fen);$("#zstatus").textContent=`Finde den besten Zug für ${Z.g.turn()==="w"?"Weiss":"Schwarz"} · ${ahead?`vorausüben, ${d.length} übrig`:`${d.length} fällig`}`;
  $("#zfb").className="fb";$("#zfb").textContent=`In der Partie gespielt: ${Z.c.played} (${Z.c.motif}).`;zdraw()}
 function zdraw(){if(!Z.g)return;const tg=Z.sel?Z.g.moves({square:Z.sel,verbose:true}).map(m=>m.to):null;drawBoard("zboard",Z.g,new Chess(Z.c.fen).turn(),{sel:Z.sel,tg,last:Z.last,arrows:Z.arrow?[Z.arrow]:[],onClick:zSq})}
 function zSq(sq){if(!Z.c||Z.done||Z.busy)return;const me=new Chess(Z.c.fen).turn();if(Z.sel){const m=pickMove(Z.g,Z.sel,sq);if(m){Z.sel=null;zTry(m);return}}
@@ -213,19 +222,19 @@ function zSq(sq){if(!Z.c||Z.done||Z.busy)return;const me=new Chess(Z.c.fen).turn
 async function zTry(m){Z.busy=true;Z.g.move(m);Z.last={from:m.from,to:m.to};zdraw();let ok=m.san===Z.c.best;
  if(!ok){$("#zfb").textContent="Stockfish prüft …";const t=new Chess(Z.g.fen());let wa;if(t.game_over())wa=t.in_checkmate()?100:50;else{const ev=await E.eval(Z.g.fen(),{depth:12,prio:true});wa=100-winOf(Z.g.fen(),ev)}ok=wa>=Z.c.wb-4}
  Z.busy=false;grade(ok,m.san)}
-function grade(ok,san){Z.done=true;const c=Z.c;day().r++;
+function grade(ok,san){Z.done=true;const c=Z.c;const dd=day();dd.r++;if(isNew(c))dd.nw=(dd.nw||0)+1;c.rev=(c.rev||0)+1;c.last=today();
  if(ok){c.ivl=c.ivl?Math.round(c.ivl*2.6):1;c.due=addDays(c.ivl);$("#zfb").className="fb good";$("#zfb").textContent=`✓ ${san} – richtig${san!==c.best?" (gleichwertig zu "+c.best+")":""}. Wieder in ${c.ivl} Tag(en).`;
   if(c.ivl>60){S.cards=S.cards.filter(x=>x!==c);$("#zfb").textContent+=" Gelernt – entfernt."}}
  else{c.ivl=0;c.due=addDays(1);const g=new Chess(c.fen);const m=g.moves({verbose:true}).find(x=>x.san===c.best);Z.g=g;Z.last=null;Z.arrow=m?{from:m.from,to:m.to,c:GREEN}:null;
   $("#zfb").className="fb bad";$("#zfb").textContent=`${san?"✗ "+san+" reicht nicht.":"Aufgelöst."} Lösung: ${c.best}.${c.line?" Variante: "+c.line+".":""} ${TIP[c.motif]||""}`;zdraw()}save()}
-$("#zsol").onclick=()=>{if(Z.c&&!Z.done&&!Z.busy)grade(false,"")};$("#znext").onclick=nextCard;
+$("#zsol").onclick=()=>{if(Z.c&&!Z.done&&!Z.busy)grade(false,"")};$("#znext").onclick=nextCard;$("#zahead").onclick=()=>{AHEAD=true;nextCard()};
 $("#zgame").onclick=()=>{if(!Z.c)return;const g=S.games.find(x=>x.id===Z.c.gid);if(!g)return;R.id=g.id;R.ply=Z.c.ply;show("review")};
 
 // ---------- Setup ----------
-function renderSet(){$("#suser").value=S.user;$("#sper").value=S.per;$("#sdepth").value=S.depth;
+function renderSet(){$("#suser").value=S.user;$("#sper").value=S.per;$("#sdepth").value=S.depth;$("#snew").value=S.newDay;
  let bytes=0;try{bytes=(localStorage.getItem(KEY)||"").length}catch(e){}$("#sinfo").textContent=`${S.games.length} Partien, ${S.cards.length} Puzzle-Stellungen, ${S.queue.length} in Warteschlange · ${(bytes/1024).toFixed(0)} KB lokal gespeichert`}
 $("#ssave").onclick=()=>{const u=$("#suser").value.trim();if(u!==S.user){S.user=u;S.lastSync=0}S.per=+$("#sper").value;S.depth=+$("#sdepth").value;save();syncLabel();sync(true);show("today")};
-$("#sper").onchange=()=>{S.per=+$("#sper").value;save()};$("#sdepth").onchange=()=>{S.depth=+$("#sdepth").value;save()};
+$("#sper").onchange=()=>{S.per=+$("#sper").value;save()};$("#sdepth").onchange=()=>{S.depth=+$("#sdepth").value;save()};$("#snew").onchange=()=>{S.newDay=+$("#snew").value;save()};
 $("#spgnadd").onclick=()=>{const pgn=$("#spgn").value.trim();if(!pgn)return;const t=new Chess();if(!t.load_pgn(pgn,{sloppy:true})){banner("PGN nicht lesbar.");return}
  const h=t.header();S.queue.push({id:h.Link||"pgn-"+Date.now(),src:"pgn",pgn,me:$("#spgncol").value,end:Date.now()/1e3});save();$("#spgn").value="";processQueue();show("today")};
 $("#sexp").onclick=async()=>{const t=exportText(),ta=$("#sexpt");ta.value=t;ta.hidden=false;try{await navigator.clipboard.writeText(t);$("#sexp").textContent="Kopiert"}catch(e){ta.select()}};

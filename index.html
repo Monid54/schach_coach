@@ -135,8 +135,8 @@ label.muted{display:flex;flex-direction:column;gap:4px;font-size:13px}
  <div class="panel">
   <div class="status" id="zstatus"></div>
   <div class="fb" id="zfb"></div>
-  <div class="row"><button class="btn" id="zsol">Lösung zeigen</button><button class="btn pri" id="znext">Nächste Stellung</button><button class="btn" id="zgame">In Partie öffnen</button></div>
-  <p class="muted">Nur Stellungen aus deinen eigenen Partien, in denen du einen Fehler gemacht hast. Gleichwertige Züge zählen als richtig (Stockfish prüft). Richtig gelöst kommt die Stellung nach 1, 3, 8, 20 … Tagen wieder.</p>
+  <div class="row"><button class="btn" id="zsol">Lösung zeigen</button><button class="btn pri" id="znext">Nächste Stellung</button><button class="btn" id="zahead" hidden>Trotzdem üben</button><button class="btn" id="zgame">In Partie öffnen</button></div>
+  <p class="muted">Nur Stellungen aus deinen eigenen Partien, in denen du einen Fehler gemacht hast. Gleichwertige Züge zählen als richtig (Stockfish prüft). Richtig gelöst kommt die Stellung nach 1, 3, 8, 20 … Tagen wieder. Neue Stellungen pro Tag sind begrenzt (Setup).</p>
  </div>
 </div></div>
 
@@ -144,7 +144,8 @@ label.muted{display:flex;flex-direction:column;gap:4px;font-size:13px}
  <h2>Chess.com</h2>
  <div class="row"><input type="text" id="suser" placeholder="Chess.com-Benutzername" autocapitalize="none" autocorrect="off" spellcheck="false"><button class="btn pri" id="ssave">Speichern & synchronisieren</button></div>
  <div class="row"><label class="muted">Neue Partien pro Sync <select id="sper"><option>3</option><option selected>5</option><option>10</option><option>20</option></select></label>
-  <label class="muted">Analysetiefe <select id="sdepth"><option value="10">10 · schnell</option><option value="12" selected>12 · Standard</option><option value="14">14 · genau</option></select></label></div>
+  <label class="muted">Analysetiefe <select id="sdepth"><option value="10">10 · schnell</option><option value="12" selected>12 · Standard</option><option value="14">14 · genau</option></select></label>
+  <label class="muted">Neue Puzzles pro Tag <select id="snew"><option>5</option><option>10</option><option selected>15</option><option>20</option><option>30</option><option value="999">Alle</option></select></label></div>
  <p class="muted">Synchronisiert automatisch beim Öffnen, höchstens alle 30 Minuten. Analysiert wird auf dem Gerät mit Stockfish 19 – das braucht Akku, ca. 30–90 s pro Partie.</p>
  <h2>Partie einfügen (PGN)</h2>
  <textarea id="spgn" placeholder="PGN aus Chess.com, Lichess …"></textarea>
