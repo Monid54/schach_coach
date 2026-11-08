@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Schach-Coach</title>
+<meta name="theme-color" content="#0f6e78">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Schach-Coach">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" href="icons/icon-192.png">
+<style>
+:root{--bg:#e9edf1;--surface:#f8fafb;--text:#16202b;--muted:#5a6878;--line:#cfd7df;--accent:#0f6e78;--accent-ink:#fff;--warn:#b7791f;--bad:#c0392b;--good:#2f855a;--sq-l:#dfe6ed;--sq-d:#7f97ae;--sel:#f2c94c;--last:rgba(242,201,76,.5);color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#10161d;--surface:#18212b;--text:#e6edf3;--muted:#93a3b4;--line:#2a3846;--accent:#3fb6c2;--accent-ink:#06252a;--warn:#e3a33d;--bad:#ef6b5c;--good:#5cc28a;--sq-l:#b8c6d4;--sq-d:#5d7690;color-scheme:dark}}
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font:16px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif;-webkit-text-size-adjust:100%}
+body{padding:env(safe-area-inset-top,0px) 0 calc(64px + env(safe-area-inset-bottom,0px))}
+header{position:sticky;top:0;z-index:5;background:var(--surface);border-bottom:1px solid var(--line);padding:10px 16px;display:flex;align-items:center;gap:10px}
+header h1{font-size:1.15rem;margin:0;font-weight:700;letter-spacing:-.01em}
+#sync{margin-left:auto;font-size:.85rem;color:var(--muted);text-align:right}
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:6;display:grid;grid-template-columns:repeat(5,1fr);background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px)}
+nav.tabs button{background:none;border:0;color:var(--muted);font:600 .72rem -apple-system,sans-serif;padding:8px 0 10px;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer}
+nav.tabs button span{font-size:1.35rem;line-height:1}
+nav.tabs button[aria-selected="true"]{color:var(--accent)}
+main{max-width:980px;margin:0 auto;padding:14px}
+.view{display:none}.view.on{display:block}
+.two{display:grid;grid-template-columns:minmax(0,520px) minmax(0,1fr);gap:18px;align-items:start}
+@media (max-width:760px){.two{grid-template-columns:1fr}}
+.bwrap{position:relative;width:100%;max-width:520px;aspect-ratio:1}
+.board{display:grid;grid-template-columns:repeat(8,1fr);width:100%;height:100%;border-radius:4px;overflow:hidden;user-select:none;-webkit-user-select:none;touch-action:manipulation;box-shadow:0 0 0 1px var(--line)}
+.arrows{position:absolute;inset:0;pointer-events:none;z-index:3}
+.sq{position:relative;display:flex;align-items:center;justify-content:center;font-size:clamp(26px,9vw,52px);line-height:1;cursor:pointer}
+.sq.l{background:var(--sq-l)}.sq.d{background:var(--sq-d)}
+.sq.last::after{content:"";position:absolute;inset:0;background:var(--last)}
+.sq.sel{box-shadow:inset 0 0 0 4px var(--sel)}
+.sq.chk{background:radial-gradient(circle,#e74c3c 0,#e74c3c55 55%,transparent 75%)}
+.sq.tgt::before{content:"";position:absolute;width:28%;height:28%;border-radius:50%;background:rgba(15,30,45,.35);z-index:2}
+.sq.tgt.cap::before{width:86%;height:86%;background:none;border:4px solid rgba(15,30,45,.35)}
+.pc{position:relative;z-index:1}.pc.w{color:#fff;-webkit-text-stroke:1.4px #1b2530}.pc.b{color:#1b2530}
+.coord{position:absolute;font:600 10px sans-serif;opacity:.75;z-index:1}.coord.f{right:3px;bottom:1px}.coord.r{left:3px;top:1px}
+.sq.l .coord{color:var(--sq-d)}.sq.d .coord{color:var(--sq-l)}
+.panel{display:flex;flex-direction:column;gap:12px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+select,input[type=text],button.btn{font:600 .95rem -apple-system,sans-serif;padding:10px 14px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--text)}
+input[type=text]{font-weight:400;min-width:0;flex:1}
+button.btn{cursor:pointer}button.btn.pri{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid var(--sel);outline-offset:2px}
+.status{font-weight:700;font-size:1.05rem}
+.fb{border-left:4px solid var(--line);padding:8px 12px;background:var(--surface);min-height:44px}
+.fb.good{border-color:var(--good)}.fb.warn{border-color:var(--warn)}.fb.bad{border-color:var(--bad)}
+.moves{font-size:.92rem;max-height:200px;overflow:auto;background:var(--surface);border:1px solid var(--line);padding:6px 8px;border-radius:8px;display:grid;grid-template-columns:2.2em 1fr 1fr;gap:1px 6px}
+.moves b{color:var(--muted);font-weight:400}.moves span{cursor:pointer;padding:1px 4px;border-radius:4px}
+.moves span.cur{background:var(--sel);color:#1b2530}.c1{color:var(--warn)}.c2,.c3{color:var(--bad);font-weight:600}
+h2{font-size:1.05rem;margin:0 0 8px}
+.dash{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:22px}
+.dash section{border-top:2px solid var(--text);padding-top:10px}
+.big{font-size:2.4rem;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
+.muted{color:var(--muted);font-size:.88rem}
+.plan{margin:0;padding-left:20px}.plan li{margin:4px 0}.plan li.done{color:var(--muted);text-decoration:line-through}
+.bar{display:grid;grid-template-columns:150px 1fr 38px;gap:8px;align-items:center;font-size:.9rem;margin:6px 0}
+.bar i{display:block;height:10px;background:var(--accent);border-radius:2px}.bar .tr{background:var(--line);border-radius:2px}
+.tip{font-size:.86rem;margin:0 0 10px;color:var(--muted)}
+table{width:100%;border-collapse:collapse;font-size:.88rem}td,th{padding:5px 3px;border-bottom:1px solid var(--line);text-align:left}th{color:var(--muted);font-weight:600}
+td.n{text-align:right;font-variant-numeric:tabular-nums}
+.glist{display:flex;flex-direction:column;gap:6px;max-height:60vh;overflow:auto}
+.gitem{display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:9px 11px;background:var(--surface);border:1px solid var(--line);border-radius:8px;cursor:pointer;text-align:left;color:var(--text);font:inherit}
+.gitem.on{border-color:var(--accent);box-shadow:inset 3px 0 0 var(--accent)}
+.res1{color:var(--good)}.res0{color:var(--bad)}
+svg.graph{width:100%;height:110px;display:block;background:var(--surface);border:1px solid var(--line);border-radius:8px;touch-action:none}
+.mlist button{display:block;width:100%;text-align:left;font:inherit;color:var(--text);background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--bad);border-radius:6px;padding:7px 10px;margin:0 0 6px;cursor:pointer}
+.banner{background:var(--accent);color:var(--accent-ink);padding:8px 14px;font-size:.88rem;display:none}
+.banner.on{display:block}
+textarea{width:100%;min-height:120px;font:12px/1.4 ui-monospace,Menlo,monospace;background:var(--surface);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px}
+.tog{display:flex;align-items:center;gap:6px;font-size:.92rem}
+</style>
+</head>
+<body>
+<header><h1>Schach-Coach</h1><div id="sync"></div></header>
+<div class="banner" id="banner"></div>
+<main>
+<div class="view on" id="v-today"><div class="dash" id="dash"></div></div>
+
+<div class="view" id="v-review"><div class="two">
+ <div class="panel"><div class="bwrap"><div id="rboard" class="board"></div><svg class="arrows" id="rarrows" viewBox="0 0 8 8"></svg></div>
+  <div class="row"><button class="btn" id="rfirst" aria-label="Anfang">⏮</button><button class="btn" id="rprev" aria-label="Zurück">◀</button><button class="btn" id="rnext" aria-label="Vor">▶</button><button class="btn" id="rlast" aria-label="Ende">⏭</button><span class="muted" id="rply"></span></div>
+  <svg class="graph" id="rgraph" viewBox="0 0 300 100" preserveAspectRatio="none"></svg>
+ </div>
+ <div class="panel">
+  <div class="status" id="rtitle">Keine Partie gewählt</div>
+  <div class="fb" id="rinfo">Wähle unten eine Partie.</div>
+  <div class="mlist" id="rmist"></div>
+  <div class="moves" id="rmoves"></div>
+  <h2>Partien</h2><div class="glist" id="glist"></div>
+ </div>
+</div></div>
+
+<div class="view" id="v-play"><div class="two">
+ <div class="bwrap"><div id="pboard" class="board"></div><svg class="arrows" id="parrows" viewBox="0 0 8 8"></svg></div>
+ <div class="panel">
+  <div class="status" id="pstatus">Neue Partie starten</div>
+  <div class="row"><select id="pcolor"><option value="w">Weiss</option><option value="b">Schwarz</option><option value="r">Zufall</option></select>
+   <select id="plevel"><option value="1">Stufe 1 · Einsteiger</option><option value="2">Stufe 2 · Hobby</option><option value="3">Stufe 3 · Klub</option><option value="4">Stufe 4 · Stark</option><option value="5">Stufe 5 · Voll</option></select></div>
+  <div class="row"><button class="btn pri" id="pnew">Neue Partie</button><button class="btn" id="presign">Aufgeben</button>
+   <label class="tog"><input type="checkbox" id="pinstant" checked> Sofort-Feedback</label></div>
+  <div class="fb" id="pfb">Nach der Partie wird sie komplett analysiert und erscheint im Review.</div>
+  <div class="moves" id="pmoves"></div>
+ </div>
+</div></div>
+
+<div class="view" id="v-puz"><div class="two">
+ <div class="bwrap"><div id="zboard" class="board"></div><svg class="arrows" id="zarrows" viewBox="0 0 8 8"></svg></div>
+ <div class="panel">
+  <div class="status" id="zstatus"></div>
+  <div class="fb" id="zfb"></div>
+  <div class="row"><button class="btn" id="zsol">Lösung zeigen</button><button class="btn pri" id="znext">Nächste Stellung</button><button class="btn" id="zgame">In Partie öffnen</button></div>
+  <p class="muted">Nur Stellungen aus deinen eigenen Partien, in denen du einen Fehler gemacht hast. Gleichwertige Züge zählen als richtig (Stockfish prüft). Richtig gelöst kommt die Stellung nach 1, 3, 8, 20 … Tagen wieder.</p>
+ </div>
+</div></div>
+
+<div class="view" id="v-set"><div class="panel" style="max-width:560px">
+ <h2>Chess.com</h2>
+ <div class="row"><input type="text" id="suser" placeholder="Chess.com-Benutzername" autocapitalize="none" autocorrect="off" spellcheck="false"><button class="btn pri" id="ssave">Speichern & synchronisieren</button></div>
+ <div class="row"><label class="muted">Neue Partien pro Sync <select id="sper"><option>3</option><option selected>5</option><option>10</option><option>20</option></select></label>
+  <label class="muted">Analysetiefe <select id="sdepth"><option value="10">10 · schnell</option><option value="12" selected>12 · Standard</option><option value="14">14 · genau</option></select></label></div>
+ <p class="muted">Synchronisiert automatisch beim Öffnen, höchstens alle 30 Minuten. Analysiert wird auf dem Gerät mit Stockfish 19 – das braucht Akku, ca. 30–90 s pro Partie.</p>
+ <h2>Partie einfügen (PGN)</h2>
+ <textarea id="spgn" placeholder="PGN aus Chess.com, Lichess …"></textarea>
+ <div class="row"><select id="spgncol"><option value="w">Ich war Weiss</option><option value="b">Ich war Schwarz</option></select><button class="btn" id="spgnadd">Analysieren</button></div>
+ <h2>Coaching mit Claude</h2>
+ <p class="muted">Kompakter Export (~300 Tokens) zum Einfügen im Chat.</p>
+ <div class="row"><button class="btn" id="sexp">Export kopieren</button></div><textarea id="sexpt" readonly hidden></textarea>
+ <h2>Daten</h2>
+ <div class="row"><button class="btn" id="sreset">Alle Daten löschen</button></div>
+ <p class="muted" id="sinfo"></p>
+</div></div>
+</main>
+<nav class="tabs" role="tablist">
+ <button data-v="today" aria-selected="true"><span>◉</span>Heute</button>
+ <button data-v="review" aria-selected="false"><span>♟&#xFE0E;</span>Review</button>
+ <button data-v="puz" aria-selected="false"><span>✦</span>Puzzles</button>
+ <button data-v="play" aria-selected="false"><span>♞&#xFE0E;</span>Spielen</button>
+ <button data-v="set" aria-selected="false"><span>⚙&#xFE0E;</span>Setup</button>
+</nav>
+<script src="vendor/chess.js"></script>
+<script src="core.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
