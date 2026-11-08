@@ -51,7 +51,7 @@ function sqXY(sq,orient){const f="abcdefgh".indexOf(sq[0]),r=+sq[1];return orien
 function drawArrows(id,orient,arr){const svg=$("#"+id);if(!svg)return;svg.innerHTML=arr.map(a=>{const[x1,y1]=sqXY(a.from,orient),[x2,y2]=sqXY(a.to,orient);
  const dx=x2-x1,dy=y2-y1,L=Math.hypot(dx,dy),ux=dx/L,uy=dy/L,ex=x2-ux*.32,ey=y2-uy*.32;
  return `<g opacity=".85"><line x1="${x1}" y1="${y1}" x2="${ex}" y2="${ey}" stroke="${a.c}" stroke-width=".17" stroke-linecap="round"/><polygon points="${x2},${y2} ${ex-uy*.28},${ey+ux*.28} ${ex+uy*.28},${ey-ux*.28}" fill="${a.c}"/></g>`}).join("")}
-const GREEN="#2f9e5b",GREY="#6b7785",RED="#d0443a";
+const GREEN="#5f9a6b",GREY="#9a8a7f",RED="#cf6f68";
 function pickMove(g,from,to){return g.moves({square:from,verbose:true}).find(x=>x.to===to&&(!x.promotion||x.promotion==="q"))}
 function uciArrow(uci,c){return uci&&uci.length>=4?{from:uci.slice(0,2),to:uci.slice(2,4),c}:null}
 
@@ -163,7 +163,7 @@ function renderReview(){const list=[...S.games].reverse();
  const cur=$("#rmoves .cur"),box=$("#rmoves");if(cur)box.scrollTop=Math.max(0,cur.offsetTop-box.offsetTop-60);
  drawGraph(g,p)}
 function drawGraph(g,p){const n=g.W.length,x=i=>n>1?i*300/(n-1):0,y=w=>100-w;const pts=g.W.map((w,i)=>x(i)+","+y(w)).join(" ");
- let dots="";g.cls.forEach((c,k)=>{if(c>=2){const mine=RC.mv[k].color===g.me;dots+=`<circle cx="${x(k+1)}" cy="${y(g.W[k+1])}" r="${mine?3.2:2.2}" fill="${c===3?RED:"#e09a2f"}" opacity="${mine?1:.5}"/>`}});
+ let dots="";g.cls.forEach((c,k)=>{if(c>=2){const mine=RC.mv[k].color===g.me;dots+=`<circle cx="${x(k+1)}" cy="${y(g.W[k+1])}" r="${mine?3.2:2.2}" fill="${c===3?RED:"#d39a4c"}" opacity="${mine?1:.5}"/>`}});
  $("#rgraph").innerHTML=`<polygon points="0,100 ${pts} 300,100" fill="var(--sq-l)"/><line x1="0" x2="300" y1="50" y2="50" stroke="var(--line)"/><polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="1.5" vector-effect="non-scaling-stroke"/><line x1="${x(p)}" x2="${x(p)}" y1="0" y2="100" stroke="var(--text)" stroke-width="1" vector-effect="non-scaling-stroke"/>${dots}`}
 $("#rgraph").addEventListener("pointerdown",e=>{const g=curGame();if(!g)return;const r=e.currentTarget.getBoundingClientRect();R.ply=Math.round((e.clientX-r.left)/r.width*(g.W.length-1));renderReview()});
 $("#rfirst").onclick=()=>{R.ply=0;renderReview()};$("#rprev").onclick=()=>{R.ply--;renderReview()};$("#rnext").onclick=()=>{R.ply++;renderReview()};$("#rlast").onclick=()=>{R.ply=1e9;renderReview()};
