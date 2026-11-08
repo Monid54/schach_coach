@@ -19,8 +19,8 @@ function terminalWin(g){if(g.in_checkmate())return g.turn()==="w"?0:100;return 5
 function classify(drop){return drop>=15?3:drop>=10?2:drop>=5?1:0}
 const MARK=["","?!","?","??"];
 /* analyzeGame: src = {sans|pgn, me, meta}, engine.eval(fen,{depth}) -> {best,cp,mate}; onProg(i,n) */
-/* pvLine: UCI-Variante -> SAN mit Zugnummern, max. n Halbzüge */
-function pvLine(fen,uci,n=10){if(!uci||!uci.length)return"";const g=new Chess(fen);let num=+fen.split(" ")[5]||1;const out=[];
+/* pvLine: UCI-Variante -> SAN mit Zugnummern, max. n Halbzüge (Standard 3 pro Seite) */
+function pvLine(fen,uci,n=6){if(!uci||!uci.length)return"";const g=new Chess(fen);let num=+fen.split(" ")[5]||1;const out=[];
  for(const u of uci.slice(0,n)){const w=g.turn()==="w";const m=g.move({from:u.slice(0,2),to:u.slice(2,4),promotion:u[4]||"q"});if(!m)break;
   if(w)out.push(num+". "+m.san);else{out.push(out.length?m.san:num+"… "+m.san);num++}}return out.join(" ")}
 /* analyzeGame: deep = Tiefe für die Nachrechnung von Fehlern/Patzern (optional), engine.eval liefert optional pv (UCI-Liste) */
