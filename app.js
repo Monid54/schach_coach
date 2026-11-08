@@ -15,6 +15,7 @@ const ymd=d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+Stri
 const today=()=>ymd(new Date());const addDays=n=>{const d=new Date();d.setDate(d.getDate()+n);return ymd(d)};
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const KEY="schachcoach2";
+const DEEP=18; // Tiefe für die Nachrechnung von Fehlern und Patzern
 function load(){try{const r=localStorage.getItem(KEY);if(r)return Object.assign(def(),JSON.parse(r))}catch(e){}return def()}
 function def(){return{user:"",per:5,depth:12,lastSync:0,games:[],queue:[],cards:[],days:{},level:3,seen:{}}}
 const S=load();
@@ -27,7 +28,7 @@ class Engine{constructor(){this.q=[];this.cur=null;this.last={};this.ok=false;
  try{this.w=new Worker("engine/stockfish-19-lite-single.js");this.w.onmessage=e=>this.line(String(e.data));this.w.onerror=()=>banner("Stockfish konnte nicht starten.");
   this.ready=new Promise(r=>this._r=r);["uci","setoption name Hash value 16","isready"].forEach(s=>this.w.postMessage(s))}catch(e){banner("Stockfish konnte nicht starten.")}}
  line(l){if(l==="readyok"&&this._r){this._r();this._r=null;this.ok=true;return}const c=this.cur;if(!c)return;
-  if(l.startsWith("info")&&l.includes(" score ")){const m=l.match(/score (cp|mate) (-?\d+)/);if(m)this.last=m[1]==="cp"?{cp:+m[2],mate:null}:{cp:0,mate:+m[2]}}
+  if(l.startsWith("info")&&l.includes(" score ")){const m=l.match(/score (cp|mate) (-?\d+)/);if(m){const pv=l.match(/ pv (.+)$/);this.last=m[1]==="cp"?{cp:+m[2],mate:null}:{cp:0,mate:+m[2]};if(pv)this.last.pv=pv[1].trim().split(/\s+/)}}
   else if(l.startsWith("bestmove")){const r=Object.assign({},this.last,{best:l.split(" ")[1]});this.cur=null;c.res(r);this.next()}}
  eval(fen,o={}){return new Promise(res=>{const j={fen,o,res};o.prio?this.q.unshift(j):this.q.push(j);if(!this.cur)this.next()})}
  async next(){const j=this.q.shift();if(!j)return;this.cur=j;this.last={cp:0,mate:null};await this.ready;
@@ -84,7 +85,7 @@ async function sync(force){if(!S.user||syncing||!navigator.onLine)return;if(!for
 let working=false;
 async function processQueue(){if(working)return;working=true;
  while(S.queue.length){const q=S.queue[0];const n=S.queue.length;
-  try{const r=await analyzeGame(q,E,S.depth,(i,t)=>banner(`Analysiere Partie (${n} in Warteschlange) · Stellung ${i+1}/${t}`));
+  try{const r=await analyzeGame(q,E,S.depth,(i,t,ph)=>banner(ph==="deep"?`Rechne Fehler tiefer nach (${n} in Warteschlange) · ${i+1}/${t}`:`Analysiere Partie (${n} in Warteschlange) · Stellung ${i+1}/${t}`),DEEP);
    const g=Object.assign(r,{id:q.id,src:q.src,tcl:q.tcl||null,end:q.end||Date.now()/1e3,lv:q.lv||null});
    if(!g.date)g.date=today();
    for(const c of r.cards)S.cards.push(Object.assign(c,{id:q.id+"#"+c.ply,gid:q.id,due:addDays(1),ivl:0}));delete g.cards;
@@ -150,7 +151,8 @@ function renderReview(){const list=[...S.games].reverse();
  let info=`Genauigkeit du ${g.acc??"–"} % · Gegner ${g.accOpp??"–"} %. Fehlerbilder: ${motTxt}.`;
  if(nextMv){const c=g.cls[p],mover=nextMv.color;const wb=mover==="w"?g.W[p]:100-g.W[p];
   if(c>0){let bs="";try{const t=new Chess(fen);const bm=t.move({from:g.best[p].slice(0,2),to:g.best[p].slice(2,4),promotion:g.best[p][4]||"q"});bs=bm?bm.san:""}catch(e){}
-   info=`${["","Ungenauigkeit","Fehler","Patzer"][c]}: ${nextMv.san} (Gewinnchance ${Math.round(wb)} % → ${Math.round(mover==="w"?g.W[p+1]:100-g.W[p+1])} %). Grün: besser war ${bs}.`}
+   info=`${["","Ungenauigkeit","Fehler","Patzer"][c]}: ${nextMv.san} (Gewinnchance ${Math.round(wb)} % → ${Math.round(mover==="w"?g.W[p+1]:100-g.W[p+1])} %). Grün: besser war ${bs}.`;
+   if(g.pv&&g.pv[p])info+=`\nBeste Fortsetzung: ${g.pv[p]}`;if(g.pv&&g.pv[p+1])info+=`\nNach ${nextMv.san} folgt: ${g.pv[p+1]}`}
   else info+=` Grau: gespielter Zug${g.best[p]&&g.best[p].slice(0,4)!==nextMv.from+nextMv.to?", grün: Engine-Zug":""}.`}
  $("#rinfo").className="fb"+(nextMv&&g.cls[p]>=2?" bad":nextMv&&g.cls[p]===1?" warn":"");$("#rinfo").textContent=info;
  const mist=[];g.cls.forEach((c,k)=>{if(c>=2&&RC.mv[k].color===g.me)mist.push(k)});
@@ -215,7 +217,7 @@ function grade(ok,san){Z.done=true;const c=Z.c;day().r++;
  if(ok){c.ivl=c.ivl?Math.round(c.ivl*2.6):1;c.due=addDays(c.ivl);$("#zfb").className="fb good";$("#zfb").textContent=`✓ ${san} – richtig${san!==c.best?" (gleichwertig zu "+c.best+")":""}. Wieder in ${c.ivl} Tag(en).`;
   if(c.ivl>60){S.cards=S.cards.filter(x=>x!==c);$("#zfb").textContent+=" Gelernt – entfernt."}}
  else{c.ivl=0;c.due=addDays(1);const g=new Chess(c.fen);const m=g.moves({verbose:true}).find(x=>x.san===c.best);Z.g=g;Z.last=null;Z.arrow=m?{from:m.from,to:m.to,c:GREEN}:null;
-  $("#zfb").className="fb bad";$("#zfb").textContent=`${san?"✗ "+san+" reicht nicht.":"Aufgelöst."} Lösung: ${c.best}. ${TIP[c.motif]||""}`;zdraw()}save()}
+  $("#zfb").className="fb bad";$("#zfb").textContent=`${san?"✗ "+san+" reicht nicht.":"Aufgelöst."} Lösung: ${c.best}.${c.line?" Variante: "+c.line+".":""} ${TIP[c.motif]||""}`;zdraw()}save()}
 $("#zsol").onclick=()=>{if(Z.c&&!Z.done&&!Z.busy)grade(false,"")};$("#znext").onclick=nextCard;
 $("#zgame").onclick=()=>{if(!Z.c)return;const g=S.games.find(x=>x.id===Z.c.gid);if(!g)return;R.id=g.id;R.ply=Z.c.ply;show("review")};
 
