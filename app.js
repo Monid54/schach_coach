@@ -117,25 +117,131 @@ Eröffnungen Weiss: ${o.w.slice(0,4).map(x=>`${x.name} ${x.n}x ${x.score}%`).joi
 Eröffnungen Schwarz: ${o.b.slice(0,4).map(x=>`${x.name} ${x.n}x ${x.score}%`).join("; ")||"–"}
 Letzte Fehler:
 `+S.cards.slice(-5).map(c=>`${c.fen} | gespielt ${c.played}, besser ${c.best} (${c.motif})`).join("\n")}
+// ---------- Icons (SF-Symbols-Stil, keine Emoji) ----------
+const IC={check:'<svg viewBox="0 0 24 24" class="ic"><path d="M6 12.5l4 4 8-9"/></svg>',
+ play:'<svg viewBox="0 0 24 24" class="ic f"><path d="M8 5.5v13l10.5-6.5z"/></svg>',
+ prev:'<svg viewBox="0 0 24 24" class="ic"><path d="M15 5l-7 7 7 7"/></svg>',next:'<svg viewBox="0 0 24 24" class="ic"><path d="M9 5l7 7-7 7"/></svg>',
+ first:'<svg viewBox="0 0 24 24" class="ic"><path d="M17 5l-7 7 7 7M7 5v14"/></svg>',last:'<svg viewBox="0 0 24 24" class="ic"><path d="M7 5l7 7-7 7M17 5v14"/></svg>',
+ info:'<svg viewBox="0 0 24 24" class="ic"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5"/><circle cx="12" cy="7.6" r=".7" class="dot"/></svg>',
+ x:'<svg viewBox="0 0 24 24" class="ic"><path d="M7 7l10 10M17 7L7 17"/></svg>',chev:'<svg viewBox="0 0 24 24" class="ic chev"><path d="M9 5l7 7-7 7"/></svg>',
+ plus:'<svg viewBox="0 0 24 24" class="ic"><path d="M12 6v12M6 12h12"/></svg>',minus:'<svg viewBox="0 0 24 24" class="ic"><path d="M6 12h12"/></svg>',
+ replay:'<svg viewBox="0 0 24 24" class="ic"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v4h4"/></svg>'};
+// Ausführliche Erklärung der Fehlerbilder (wie erkannt, was dahintersteckt)
+const DESC={"Figur eingestellt":"Nach deinem Zug konnte der Gegner eine Leichtfigur, einen Turm oder die Dame schlagen, die mehr wert war als das, was du selbst gerade geschlagen hast. Meist steht die gezogene Figur ungedeckt auf einem angegriffenen Feld, oder dein Zug hat eine andere Figur oder eine Deckung aufgegeben.",
+ "Schlagchance verpasst":"Die Engine hätte hier Material gewonnen (mindestens eine Leichtfigur), du hast stattdessen nicht geschlagen. Häufig hängt nach dem letzten Gegnerzug eine Figur, oder eine einfache Taktik wie Gabel, Fesselung oder Spiess gewinnt etwas.",
+ "Matt übersehen":"Du hattest ein erzwungenes Matt, hast es aber nicht gespielt und danach nicht mehr erzwingen können.",
+ "Matt zugelassen":"Nach deinem Zug konnte der Gegner Matt erzwingen. Typisch sind eine schwache Grundreihe, eine offene Diagonale zum König oder ein übersehenes Schach.",
+ "Positionsfehler":"Dein Zug kostete mindestens 10 Prozentpunkte Gewinnchance, ohne dass sofort Material verloren ging oder ein Matt im Spiel war. Dahinter stecken meist falsch platzierte Figuren, ein ungünstiger Abtausch, eine neue Bauernschwäche oder ein Plan des Gegners, dessen Folgen erst einige Züge später sichtbar werden. Im Beispiel zeigt «Gespielt» die Folge laut Engine, «Besser» den stärkeren Plan.",
+ "Zeitnot":"Ein Fehler oder Patzer passierte, als weniger als 10 % deiner Startzeit (mindestens 15 Sekunden) übrig waren.",
+ "Dame zu früh":"Du hast die Dame in deinen ersten 5 Zügen gezogen. Eine früh entwickelte Dame wird mit Tempo von gegnerischen Figuren angegriffen und bremst deine eigene Entwicklung.",
+ "Figur doppelt gezogen":"In den ersten 8 Zügen hast du einen Springer oder Läufer ein zweites Mal gezogen, ohne dabei zu schlagen. Das kostet Entwicklungszeit, die dem Gegner zugutekommt.",
+ "Nicht rochiert":"Nach 12 Zügen stand dein König noch auf dem Ausgangsfeld. Ein König in der Mitte wird zum Angriffsziel, sobald Linien geöffnet werden."};
+const daysAgo=t=>{const d=Math.round((Date.now()/1e3-t)/86400);return d<=0?"heute":d===1?"gestern":`vor ${d} Tagen`};
+const FC={};const fensC=g=>FC[g.id]||(FC[g.id]=fensOf(g));
+const sideAt=(g,k)=>(g.start.split(" ")[1]==="w")===(k%2===0)?"w":"b";
+const moveNo=(g,k)=>{const st=g.start.split(" "),w=st[1]==="w";return(+st[5]||1)+Math.floor((k+(w?0:1))/2)};
+const plyLbl=(g,k)=>`${moveNo(g,k)}${sideAt(g,k)==="w"?".":"…"} ${g.sans[k]}`;
+const uciSan=(fen,u)=>{try{return u?new Chess(fen).move({from:u.slice(0,2),to:u.slice(2,4),promotion:u[4]||"q"}).san:null}catch(e){return null}};
+function examples(m,n=3){const out=[],seen=new Set(),push=(g,ply)=>{const k=g.id+"#"+ply;if(!seen.has(k)&&g.sans[ply]){seen.add(k);out.push({g,ply})}};
+ for(const g of[...S.games].reverse()){for(const e of g.ex||[])if(e.m===m&&out.length<n)push(g,e.ply);if(out.length>=n)return out}
+ for(const c of[...S.cards].reverse()){if(out.length>=n)break;if(c.motif!==m)continue;const g=S.games.find(x=>x.id===c.gid);if(g)push(g,c.ply)}return out}
+// ---------- Sheet (Bottom Sheet) mit Brett-Simulation ----------
+let SIM={t:null};
+function openSheet(title,html){clearInterval(SIM.t);$("#shtitle").textContent=title;$("#shbody").innerHTML=html;$("#sheet").hidden=false;$("#sheet .sheet-card").scrollTop=0;document.body.classList.add("noscroll")}
+function closeSheet(){clearInterval(SIM.t);$("#sheet").hidden=true;document.body.classList.remove("noscroll")}
+$("#sheet .sheet-bg").onclick=closeSheet;$("#shclose").onclick=closeSheet;$("#shclose").innerHTML=IC.x;
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("#sheet").hidden)closeSheet()});
+const simHTML=(vars,auto)=>`${vars.length>1?`<div class="seg" id="sseg">${vars.map((v,i)=>`<button data-i="${i}">${v.label}</button>`).join("")}</div>`:""}
+ <div class="bwrap sbw"><div id="sboard" class="board"></div><svg class="arrows" id="sarrows" viewBox="0 0 8 8"></svg></div>
+ <div class="seq" id="sseq"></div><p class="muted" id="snote"></p>
+ <div class="row">${auto?`<button class="btn ib" id="sreplay" aria-label="Neu starten">${IC.replay}</button>`:`<button class="btn ib" id="sfirst" aria-label="Anfang">${IC.first}</button><button class="btn ib" id="sprev" aria-label="Zurück">${IC.prev}</button><button class="btn ib" id="snext" aria-label="Vor">${IC.next}</button>`}</div>`;
+function simWire(vars,auto){const go=i=>{simStart(vars,i,auto);document.querySelectorAll("#sseg button").forEach(b=>b.classList.toggle("on",+b.dataset.i===i))};
+ document.querySelectorAll("#sseg button").forEach(b=>b.onclick=()=>go(+b.dataset.i));
+ const st=d=>{if(!SIM.mv)return;SIM.k=Math.max(0,Math.min(SIM.mv.length,d==="first"?0:SIM.k+d));simDraw()};
+ if(auto)$("#sreplay").onclick=()=>go(SIM.i||0);else{$("#sfirst").onclick=()=>st("first");$("#sprev").onclick=()=>st(-1);$("#snext").onclick=()=>st(1)}
+ go(0)}
+function simStart(vars,i,auto){clearInterval(SIM.t);const v=vars[i],c=new Chess(v.fen),fens=[v.fen],mv=[];
+ for(const x of v.sans){const m=c.move(x,{sloppy:true});if(!m)break;mv.push(m);fens.push(c.fen())}
+ SIM={vars,i,fens,mv,k:0,auto,t:null,pause:0};simDraw();
+ if(auto)SIM.t=setInterval(()=>{if($("#sheet").hidden)return clearInterval(SIM.t);if(SIM.k<SIM.mv.length)SIM.k++;else if(++SIM.pause>2){SIM.k=0;SIM.pause=0}simDraw()},1100)}
+function simDraw(){const s=SIM,v=s.vars[s.i],k=s.k,nx=s.mv[k];
+ const arrows=k===0&&v.arrows?v.arrows:nx&&!s.auto?[{from:nx.from,to:nx.to,c:v.color||GREEN}]:[];
+ drawBoard("sboard",new Chess(s.fens[k]),v.orient||"w",{last:k>0?{from:s.mv[k-1].from,to:s.mv[k-1].to}:null,arrows:arrows.filter(Boolean)});
+ const st=v.fen.split(" ");let num=+st[5]||1,w=st[1]==="w";
+ $("#sseq").innerHTML=s.mv.map((m,i)=>{const lbl=w?`${num}. ${m.san}`:i===0?`${num}… ${m.san}`:m.san;if(!w)num++;w=!w;return`<span class="${i<k?"done":i===k&&!s.auto?"nx":""}">${lbl}</span>`}).join("");
+ $("#snote").textContent=v.note||""}
+// Beispiel eines Fehlerbilds: Gespielt (mit Folge) / Besser
+function openExample(g,ply,m){const F=fensC(g),fen=F.f[ply],played=F.mv[ply],bestS=uciSan(fen,g.best[ply]);
+ const viaEngine=!!(g.pv&&g.pv[ply+1]),after=viaEngine?sanList(g.pv[ply+1]):g.sans.slice(ply+1,ply+5);
+ const better=bestS&&bestS!==played.san;
+ const arrows=[{from:played.from,to:played.to,c:RED}];if(better)arrows.push(uciArrow(g.best[ply],GREEN));
+ const vars=[{label:"Gespielt",fen,sans:[played.san,...after].slice(0,7),color:RED,orient:g.me,arrows,
+  note:`Rot: dein Zug ${played.san}${better?`, grün: besser ${bestS}`:""}. Danach ${viaEngine?"die Folge laut Engine":"der Partieverlauf"}.`}];
+ if(better){const bl=g.pv&&g.pv[ply]?sanList(g.pv[ply]):[bestS];vars.push({label:"Besser",fen,sans:bl.slice(0,6),color:GREEN,orient:g.me,note:"Grün: die stärkere Fortsetzung laut Engine."})}
+ const opp=g.me==="w"?g.black:g.white;
+ openSheet(m,`<p class="muted" style="margin:0">Partie gegen ${esc(opp)}${g.date?" · "+fmtD(g.date):""} · ${plyLbl(g,ply)}</p>${simHTML(vars,false)}<div class="row"><button class="btn" id="sreview">In Review öffnen</button></div>`);
+ simWire(vars,false);$("#sreview").onclick=()=>{closeSheet();R.id=g.id;R.ply=ply;R.v=null;show("review")}}
+function openAccInfo(){openSheet("So wird Genauigkeit berechnet",`<div class="doc">
+ <p>Stockfish bewertet jede Stellung der Partie. Die Bewertung in Hundertstel-Bauern (cp) wird in eine <b>Gewinnchance</b> aus Sicht der ziehenden Seite umgerechnet:</p>
+ <p class="fx">Gewinnchance = 50 + 50 · (2 / (1 + e<sup>−0.00368 · cp</sup>) − 1)</p>
+ <p>Pro Zug zählt der <b>Verlust</b>: Gewinnchance vor dem Zug minus nach dem Zug. Spielst du den Engine-Zug, ist der Verlust 0. Daraus folgt die <b>Zuggenauigkeit</b>:</p>
+ <p class="fx">Genauigkeit = 103.17 · e<sup>−0.04354 · Verlust</sup> − 3.17</p>
+ <p>begrenzt auf 0–100 %. Ohne Verlust ergibt das 100 %, bei 10 Punkten Verlust rund 64 %, bei 20 Punkten rund 40 %.</p>
+ <p><b>Partie-Genauigkeit</b> ist der Mittelwert über alle deine Züge. Phasen: <b>Eröffnung</b> sind deine ersten 10 Züge, <b>Endspiel</b> beginnt, sobald höchstens 26 Punkte an Figuren auf dem Brett sind (ohne Bauern und Könige; Springer und Läufer 3, Turm 5, Dame 9). Alles dazwischen ist <b>Mittelspiel</b>. Angezeigt wird jeweils der Durchschnitt der letzten 20 Partien.</p>
+ <p><b>Einstufung</b> nach Verlust: ab 5 Punkten Ungenauigkeit (?!), ab 10 Fehler (?), ab 15 Patzer (??).</p>
+ <p class="muted">Die Formeln stammen von Lichess und sind öffentlich dokumentiert. Chess.com verwendet ein eigenes, nicht veröffentlichtes Verfahren (CAPS), daher weichen die Werte ab. Lichess mittelt zudem gewichtet, hier wird einfach gemittelt.</p></div>`)}
+function openOpening(fam,col){const o=OPENINGS[fam],mine=S.games.filter(g=>g.family===fam&&g.me===col);
+ const sans=o?o.m:(mine[mine.length-1]?.sans||[]).slice(0,8);const st=openingStats(S.games)[col].find(x=>x.name===fam);
+ const vars=[{fen:"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",sans,orient:col,note:o?"Hauptlinie, läuft in Schleife.":"Zugfolge aus deiner letzten Partie mit dieser Eröffnung."}];
+ const li=(arr,cls,ic)=>`<ul class="pros">${arr.map(t=>`<li><span class="pi ${cls}">${ic}</span><span>${t}</span></li>`).join("")}</ul>`;
+ openSheet(o?o.n:fam,`${o&&o.n!==fam?`<p class="muted" style="margin:0">${esc(fam)}</p>`:""}<p>${o?o.d:"Für diese Eröffnung ist noch keine Beschreibung hinterlegt."}</p>${simHTML(vars,true)}
+  ${o?`<h2>Vorteile</h2>${li(o.p,"good",IC.plus)}<h2>Nachteile</h2>${li(o.c,"bad",IC.minus)}<h2>Typischer Elo-Bereich</h2><p style="margin-top:4px">${o.e}<br><span class="muted">Einschätzung, keine Statistik.</span></p>`:""}
+  ${st?`<h2>Deine Bilanz mit ${col==="w"?"Weiss":"Schwarz"}</h2><p style="margin-top:4px">${st.n} Partien · ${st.score} % Punkte · Genauigkeit ${st.acc??"–"} %</p>`:""}`);simWire(vars,true)}
+function openOpMistakes(fam,col){const gs=S.games.filter(g=>g.family===fam&&g.me===col).reverse();let tot=0,early=0;const mc={};
+ const rows=gs.map(g=>{const ks=[];g.cls.forEach((c,k)=>{if(c>=2&&sideAt(g,k)===g.me)ks.push(k)});tot+=ks.length;
+  const opp=g.me==="w"?g.black:g.white,rs=g.res===1?["S","win"]:g.res===0?["N","loss"]:g.res===.5?["R","draw"]:["–",""];
+  const items=ks.map(k=>{const mn=moveNo(g,k),ph=mn<=10?"Eröffnung":"";if(mn<=10)early++;const mo=(g.ex||[]).filter(e=>e.ply===k).map(e=>e.m);mo.forEach(x=>mc[x]=(mc[x]||0)+1);
+   return`<button class="mi" data-g="${encodeURIComponent(g.id)}" data-k="${k}"><b>${plyLbl(g,k)}${MARK[g.cls[k]]}</b><span>${[mo.join(", ")||(g.cls[k]===3?"Patzer":"Fehler"),ph].filter(Boolean).join(" · ")}</span>${IC.chev}</button>`}).join("");
+  return`<div class="og"><div class="ogh"><span class="rb ${rs[1]}">${rs[0]}</span><span class="gm"><span class="gn">${esc(opp)}</span><span class="gs">${g.date?fmtD(g.date):""} · Genauigkeit ${g.acc??"–"} %</span></span></div>${items||'<p class="muted" style="margin:6px 0 0">Keine Fehler oder Patzer.</p>'}</div>`}).join("");
+ const top=Object.entries(mc).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([k,v])=>`${k} ×${v}`).join(", ");
+ openSheet(`Deine Fehler: ${(OPENINGS[fam]||{}).n||fam}`,`<p class="muted" style="margin:0">Mit ${col==="w"?"Weiss":"Schwarz"} · ${gs.length} ${gs.length===1?"Partie":"Partien"}</p>
+  <div class="fb" style="margin:12px 0">${tot} Fehler und Patzer, davon ${early} in den ersten 10 Zügen.${top?`\nHäufigste Fehlerbilder: ${top}`:""}</div>${rows}`);
+ document.querySelectorAll("#shbody .mi").forEach(b=>b.onclick=()=>{closeSheet();R.id=decodeURIComponent(b.dataset.g);R.ply=+b.dataset.k;R.v=null;show("review")})}
+const WOPEN=new Set();
 function renderDash(){const d=day(),due=dueCards().length,G=S.games,w=weaknesses(G),p=phaseAcc(G),o=openingStats(G),rec=G.slice(-20).filter(g=>g.acc!=null);
  const newest=G[G.length-1];const revDone=!newest||S.seen[newest.id];
- const plan=[[newest?`Neueste Partie im Review ansehen (${newest.white} – ${newest.black})`:"Chess.com-Konto im Setup eintragen",revDone&&!!newest],
-  [due?`${Math.min(due,5)} Puzzles aus eigenen Fehlern`:"Keine Puzzles fällig",due===0],["1 Partie spielen (Chess.com oder hier)",d.g>0||G.some(g=>g.date===today())]];
+ const plan=[[newest?`Neueste Partie im Review ansehen (${esc(newest.white)} – ${esc(newest.black)})`:"Chess.com-Konto im Setup eintragen",revDone&&!!newest],
+  [due?`${Math.min(due,5)} Puzzles aus eigenen Fehlern lösen`:"Puzzles für heute erledigt",due===0],["1 Partie spielen (Chess.com oder hier)",d.g>0||G.some(g=>g.date===today())]];
  const top=w[0];
- const wH=w.length?w.slice(0,6).map(([k,v])=>`<div class="bar"><span>${k}</span><span class="tr"><i style="width:${Math.min(100,v*50)}%"></i></span><span>${v.toFixed(1)}</span></div><div class="tip">${TIP[k]||""}</div>`).join(""):'<p class="muted">Noch keine analysierten Partien.</p>';
+ const wH=w.length?w.slice(0,6).map(([k,v])=>{const op=WOPEN.has(k),ex=op?examples(k):[];return`<div class="wk${op?" open":""}" data-k="${esc(k)}"><button class="wkh" aria-expanded="${op}"><span>${k}</span><span class="tr"><i style="width:${Math.min(100,v*50)}%"></i></span><span class="n">${v.toFixed(1)}</span>${IC.chev}</button>
+  <div class="wkb"${op?"":" hidden"}><p>${DESC[k]||""}</p><p class="tipb"><b>Tipp:</b> ${TIP[k]||""}</p>
+  ${ex.length?`<h2>Aktuelle Beispiele</h2>${ex.map((e,i)=>`<button class="mi" data-i="${i}"><b>${plyLbl(e.g,e.ply)}</b><span>gegen ${esc(e.g.me==="w"?e.g.black:e.g.white)}${e.g.date?" · "+fmtD(e.g.date).slice(0,6):""}</span>${IC.chev}</button>`).join("")}`:'<p class="muted">Noch keine Beispielstellung gespeichert. Neu analysierte Partien liefern Beispiele.</p>'}</div></div>`}).join("")
+  +'<p class="muted" style="margin:10px 0 0">Zahl = durchschnittliche Anzahl pro Partie in den letzten 20 Partien. Antippen für Details.</p>':'<p class="muted">Noch keine analysierten Partien.</p>';
  let spark='<p class="muted">Verlauf ab 2 Partien.</p>';
- if(rec.length>=2){const Wd=300,H=90,pts=rec.map((g,i)=>[i*(Wd-10)/(rec.length-1)+5,H-5-(g.acc/100)*(H-10)]);const y70=H-5-.7*(H-10);
-  spark=`<svg viewBox="0 0 ${Wd} ${H}" style="width:100%;height:90px" preserveAspectRatio="none"><line x1="0" x2="${Wd}" y1="${y70}" y2="${y70}" stroke="var(--line)" stroke-dasharray="4 4"/><polyline fill="none" stroke="var(--accent)" stroke-width="2.5" points="${pts.map(q=>q.join(",")).join(" ")}"/>${pts.map((q,i)=>`<circle cx="${q[0]}" cy="${q[1]}" r="3.5" fill="${rec[i].res===1?"var(--good)":rec[i].res===0?"var(--bad)":"var(--warn)"}"/>`).join("")}</svg><p class="muted">Genauigkeit letzte ${rec.length} Partien · gestrichelt 70 %</p>`}
+ if(rec.length>=2){const Wd=320,H=120,L=36,Rr=10,T=8,B=24,n=rec.length,lo=Math.max(0,Math.min(40,Math.min(...rec.map(g=>g.acc))-10)),x=i=>L+i*(Wd-L-Rr)/(n-1),y=a=>T+(1-(a-lo)/(100-lo))*(H-T-B);
+  const pts=rec.map((g,i)=>[x(i),y(g.acc)]);
+  spark=`<svg viewBox="0 0 ${Wd} ${H}" class="spark">${[100,70,40].filter(v=>v>=lo).map(v=>`<line x1="${L}" x2="${Wd-Rr}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"${v===70?' stroke-dasharray="4 4"':""}/><text x="${L-6}" y="${y(v)+4}" text-anchor="end">${v} %</text>`).join("")}
+  <polyline fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linejoin="round" points="${pts.map(q=>q.join(",")).join(" ")}"/>${pts.map((q,i)=>`<circle cx="${q[0]}" cy="${q[1]}" r="4" fill="${rec[i].res===1?"var(--good)":rec[i].res===0?"var(--bad)":"var(--warn)"}" stroke="var(--surface)" stroke-width="1.5"/>`).join("")}
+  <text x="${L}" y="${H-6}" text-anchor="start">${daysAgo(rec[0].end)}</text><text x="${Wd-Rr}" y="${H-6}" text-anchor="end">${daysAgo(rec[n-1].end)}</text></svg>
+  <div class="legend"><span><i style="background:var(--good)"></i>Sieg</span><span><i style="background:var(--bad)"></i>Niederlage</span><span><i style="background:var(--warn)"></i>Remis</span></div>
+  <p class="muted" style="margin:4px 0 0">Jeder Punkt ist eine Partie: Höhe = deine Genauigkeit, Farbe = Ergebnis. Letzte ${n} Partien.</p>`}
  const ph=[["Eröffnung","o"],["Mittelspiel","m"],["Endspiel","e"]].map(([n,k])=>`<div class="bar"><span>${n}</span><span class="tr"><i style="width:${p[k]??0}%"></i></span><span>${p[k]??"–"}</span></div>`).join("");
- const otab=(arr,lbl)=>arr.length?`<table><tr><th>${lbl}</th><th class="n">Partien</th><th class="n">Punkte</th><th class="n">Genau.</th></tr>${arr.slice(0,6).map(x=>`<tr><td>${x.name}</td><td class="n">${x.n}</td><td class="n" style="color:${x.n>=3&&x.score<40?"var(--bad)":x.n>=3&&x.score>=60?"var(--good)":"inherit"}">${x.score} %</td><td class="n">${x.acc??"–"}</td></tr>`).join("")}</table>`:"";
+ const cell=(x,col,v,st)=>`<td class="n"><button class="om" data-op="${esc(x.name)}" data-c="${col}"${st?` style="${st}"`:""}>${v}</button></td>`;
+ const otab=(arr,lbl,col)=>arr.length?`<table class="otab"><tr><th>${lbl}</th><th class="n">Partien</th><th class="n">Punkte</th><th class="n">Genau.</th></tr>${arr.slice(0,6).map(x=>`<tr><td><button class="lnk" data-op="${esc(x.name)}" data-c="${col}">${esc((OPENINGS[x.name]||{}).n||x.name)}</button></td>${cell(x,col,x.n)}${cell(x,col,x.score+" %",x.n>=3&&x.score<40?"color:var(--bad)":x.n>=3&&x.score>=60?"color:var(--good)":"")}${cell(x,col,x.acc??"–")}</tr>`).join("")}</table>`:"";
  $("#dash").innerHTML=`
  <section><h2>Heute</h2><div class="row" style="gap:26px"><div><div class="big">${streak()}</div><div class="muted">Tage in Folge</div></div><div><div class="big">${due}</div><div class="muted">Puzzles fällig</div></div><div><div class="big">${G.length}</div><div class="muted">Partien analysiert</div></div></div>
- <ul class="plan" style="margin-top:12px">${plan.map(([t,ok])=>`<li class="${ok?"done":""}">${t}</li>`).join("")}${top?`<li>Fokus: ${top[0]} – ${TIP[top[0]]||""}</li>`:""}</ul>
- ${S.user?`<div class="row" style="margin-top:10px"><button class="btn" id="dsync">Jetzt synchronisieren</button>${newest?'<button class="btn pri" id="dopen">Neueste Partie öffnen</button>':""}</div>`:'<div class="row" style="margin-top:10px"><button class="btn pri" id="dset">Chess.com verbinden</button></div>'}</section>
- <section><h2>Deine Schwachstellen</h2><p class="muted" style="margin-top:0">Fehler pro Partie, letzte 20 Partien</p>${wH}</section>
- <section><h2>Genauigkeit</h2>${ph}<div style="margin-top:12px">${spark}</div></section>
- <section><h2>Eröffnungen</h2>${otab(o.w,"Mit Weiss")}${o.b.length?'<div style="height:12px"></div>':""}${otab(o.b,"Mit Schwarz")}${!o.w.length&&!o.b.length?'<p class="muted">Erscheint mit Chess.com-Partien.</p>':'<p class="muted">Rot: unter 40 % bei mind. 3 Partien.</p>'}</section>`;
- const ds=$("#dsync");if(ds)ds.onclick=()=>sync(true);const dO=$("#dopen");if(dO)dO.onclick=()=>{R.id=newest.id;R.ply=null;show("review")};const dS=$("#dset");if(dS)dS.onclick=()=>show("set")}
+ <ul class="checks">${plan.map(([t,ok])=>`<li class="${ok?"ok":""}"><span class="cbox">${ok?IC.check:""}</span><span>${t}</span></li>`).join("")}</ul>
+ ${top?`<div class="focus"><b>Fokus: ${top[0]}</b>\n${TIP[top[0]]||""}</div>`:""}
+ ${S.user?`<div class="row" style="margin-top:12px"><button class="btn" id="dsync">Jetzt synchronisieren</button>${newest?'<button class="btn pri" id="dopen">Neueste Partie öffnen</button>':""}</div>`:'<div class="row" style="margin-top:12px"><button class="btn pri" id="dset">Chess.com verbinden</button></div>'}</section>
+ <section><h2>Deine Schwachstellen</h2>${wH}</section>
+ <section><div class="sh"><h2>Genauigkeit</h2><button class="infob" id="dacc" aria-label="Wie wird Genauigkeit berechnet?">${IC.info}</button></div>${ph}<div style="margin-top:14px">${spark}</div></section>
+ <section><h2>Eröffnungen</h2>${otab(o.w,"Mit Weiss","w")}${o.b.length?'<div style="height:12px"></div>':""}${otab(o.b,"Mit Schwarz","b")}${!o.w.length&&!o.b.length?'<p class="muted">Erscheint mit Chess.com-Partien.</p>':'<p class="muted">Name antippen für Erklärung und Hauptlinie, Zahlen antippen für deine Fehler. Rot: unter 40 % Punkte bei mind. 3 Partien.</p>'}</section>`;
+ const ds=$("#dsync");if(ds)ds.onclick=()=>sync(true);const dO=$("#dopen");if(dO)dO.onclick=()=>{R.id=newest.id;R.ply=null;R.v=null;show("review")};const dS=$("#dset");if(dS)dS.onclick=()=>show("set");
+ $("#dacc").onclick=openAccInfo;
+ document.querySelectorAll("#dash .wk").forEach(el=>{const k=el.dataset.k;el.querySelector(".wkh").onclick=()=>{WOPEN.has(k)?WOPEN.delete(k):WOPEN.add(k);renderDash()};
+  const ex=WOPEN.has(k)?examples(k):[];el.querySelectorAll(".mi").forEach(b=>b.onclick=()=>{const e=ex[+b.dataset.i];openExample(e.g,e.ply,k)})});
+ document.querySelectorAll("#dash .lnk").forEach(b=>b.onclick=()=>openOpening(b.dataset.op,b.dataset.c));
+ document.querySelectorAll("#dash .om").forEach(b=>b.onclick=()=>openOpMistakes(b.dataset.op,b.dataset.c))}
 
 // ---------- Review ----------
 let R={id:null,ply:0,v:null,pgn:false,f:{c:null,r:null,t:null}};
@@ -181,7 +287,7 @@ function renderReview(){renderList();
   drawBoard("rboard",new Chess(v.fens[k]),g.me,{last:k>0?{from:v.mv[k-1].from,to:v.mv[k-1].to}:null,arrows:nx?[{from:nx.from,to:nx.to,c:v.kind==="best"?GREEN:RED}]:[]});
   $("#rply").textContent=`Variante · Zug ${k} von ${v.mv.length}`;
   $("#rinfo").className="fb "+(v.kind==="best"?"good":"bad");
-  $("#rinfo").innerHTML=`<b>${v.kind==="best"?"Beste Fortsetzung":"Was nach "+esc(v.after)+" droht"}</b><div class="seq">${v.mv.map((m,i)=>`<span class="${i<k?"done":i===k?"nx":""}">${m.san}</span>`).join("")}</div><span class="muted">${k<v.mv.length?"Mit ▶ den nächsten Zug ausführen.":"Ende der Variante."}</span><div class="row"><button class="btn" id="rvback">Zurück zur Partie</button></div>`;
+  $("#rinfo").innerHTML=`<b>${v.kind==="best"?"Beste Fortsetzung":"Was nach "+esc(v.after)+" droht"}</b><div class="seq">${v.mv.map((m,i)=>`<span class="${i<k?"done":i===k?"nx":""}">${m.san}</span>`).join("")}</div><span class="muted">${k<v.mv.length?"Mit dem Pfeil nach rechts den nächsten Zug ausführen.":"Ende der Variante."}</span><div class="row"><button class="btn" id="rvback">Zurück zur Partie</button></div>`;
   $("#rvback").onclick=()=>{R.v=null;renderReview()};return}
  const arrows=[];if(nextMv){arrows.push({from:nextMv.from,to:nextMv.to,c:GREY});if(g.best[p]&&g.best[p].slice(0,4)!==nextMv.from+nextMv.to)arrows.push(uciArrow(g.best[p],GREEN))}
  drawBoard("rboard",new Chess(fen),g.me,{last:p>0?{from:RC.mv[p-1].from,to:RC.mv[p-1].to}:null,arrows:arrows.filter(Boolean)});
@@ -192,7 +298,7 @@ function renderReview(){renderList();
   if(c>0){let bs="";try{const t=new Chess(fen);const bm=t.move({from:g.best[p].slice(0,2),to:g.best[p].slice(2,4),promotion:g.best[p][4]||"q"});bs=bm?bm.san:""}catch(e){}
    info=`<b>${["","Ungenauigkeit","Fehler","Patzer"][c]}: ${nextMv.san}</b>\nGewinnchance ${Math.round(wb)} % → ${Math.round(wa)} %. Besser war <b>${bs}</b> (grüner Pfeil).`;
    const b1=g.pv&&g.pv[p],b2=g.pv&&g.pv[p+1];
-   if(b1||b2)info+=`<div class="row">${b1?'<button class="btn" id="rvbest">▶ Beste Fortsetzung</button>':""}${b2?`<button class="btn" id="rvthreat">▶ Was nach ${nextMv.san} droht</button>`:""}</div>`}
+   if(b1||b2)info+=`<div class="row">${b1?'<button class="btn" id="rvbest">'+IC.play+'Beste Fortsetzung</button>':""}${b2?`<button class="btn" id="rvthreat">${IC.play}Was nach ${nextMv.san} droht</button>`:""}</div>`}
   else info+=`\nGrau: gespielter Zug${g.best[p]&&g.best[p].slice(0,4)!==nextMv.from+nextMv.to?", grün: Engine-Zug":""}.`}
  $("#rinfo").className="fb"+(nextMv&&g.cls[p]>=2?" bad":nextMv&&g.cls[p]===1?" warn":"");$("#rinfo").innerHTML=info;
  if($("#rvbest"))$("#rvbest").onclick=()=>startVar(fen,g.pv[p],"best");
@@ -221,7 +327,7 @@ async function userMove(m){P.busy=true;P.arrow=null;const fenB=P.g.fen();P.g.mov
   let wa;const t=new Chess(P.g.fen());if(t.game_over())wa=t.in_checkmate()?100:50;else{const ev=await E.eval(P.g.fen(),{depth:10,prio:true});wa=100-winOf(P.g.fen(),ev)}
   const drop=pre.best&&pre.best.slice(0,4)===m.from+m.to?0:Math.max(0,wb-wa);const c=classify(drop);P.cls[P.g.history().length-1]=c;
   let bs="";try{bs=new Chess(fenB).move({from:pre.best.slice(0,2),to:pre.best.slice(2,4),promotion:pre.best[4]||"q"}).san}catch(e){}
-  $("#pfb").className="fb "+(c>=2?"bad":c===1?"warn":"good");$("#pfb").textContent=c===0?"✓ Guter Zug.":`${["","?! Ungenau","? Fehler","?? Patzer"][c]} (${Math.round(wb)} % → ${Math.round(wa)} %). Besser war ${bs}.`;
+  $("#pfb").className="fb "+(c>=2?"bad":c===1?"warn":"good");$("#pfb").textContent=c===0?"Guter Zug.":`${["","?! Ungenau","? Fehler","?? Patzer"][c]} (${Math.round(wb)} % → ${Math.round(wa)} %). Besser war ${bs}.`;
   if(c>=1)P.arrow=uciArrow(pre.best,GREEN)}
  P.busy=false;if(pEnd())return;await engMove()}
 function winOf(fen,ev){const stm=fen.split(" ")[1];let w=ev.mate!=null?(ev.mate>0?100:0):winPct(ev.cp);return w}
@@ -250,10 +356,10 @@ async function zTry(m){Z.busy=true;Z.g.move(m);Z.last={from:m.from,to:m.to};zdra
  if(!ok){$("#zfb").textContent="Stockfish prüft …";const t=new Chess(Z.g.fen());let wa;if(t.game_over())wa=t.in_checkmate()?100:50;else{const ev=await E.eval(Z.g.fen(),{depth:12,prio:true});wa=100-winOf(Z.g.fen(),ev)}ok=wa>=Z.c.wb-4}
  Z.busy=false;grade(ok,m.san)}
 function grade(ok,san){Z.done=true;const c=Z.c;const dd=day();dd.r++;if(isNew(c))dd.nw=(dd.nw||0)+1;c.rev=(c.rev||0)+1;c.last=today();
- if(ok){c.ivl=c.ivl?Math.round(c.ivl*2.6):1;c.due=addDays(c.ivl);$("#zfb").className="fb good";$("#zfb").textContent=`✓ ${san} – richtig${san!==c.best?" (gleichwertig zu "+c.best+")":""}. Wieder in ${c.ivl} Tag(en).`;
+ if(ok){c.ivl=c.ivl?Math.round(c.ivl*2.6):1;c.due=addDays(c.ivl);$("#zfb").className="fb good";$("#zfb").textContent=`Richtig: ${san}${san!==c.best?" (gleichwertig zu "+c.best+")":""}. Wieder in ${c.ivl} Tag(en).`;
   if(c.ivl>60){S.cards=S.cards.filter(x=>x!==c);$("#zfb").textContent+=" Gelernt – entfernt."}}
  else{c.ivl=0;c.due=addDays(1);const g=new Chess(c.fen);const m=g.moves({verbose:true}).find(x=>x.san===c.best);Z.g=g;Z.last=null;Z.arrow=m?{from:m.from,to:m.to,c:GREEN}:null;
-  $("#zfb").className="fb bad";$("#zfb").textContent=`${san?"✗ "+san+" reicht nicht.":"Aufgelöst."} Lösung: ${c.best}.${c.line?" Variante: "+c.line+".":""} ${TIP[c.motif]||""}`;zdraw()}save()}
+  $("#zfb").className="fb bad";$("#zfb").textContent=`${san?san+" reicht nicht.":"Aufgelöst."} Lösung: ${c.best}.${c.line?" Variante: "+c.line+".":""} ${TIP[c.motif]||""}`;zdraw()}save()}
 $("#zsol").onclick=()=>{if(Z.c&&!Z.done&&!Z.busy)grade(false,"")};$("#znext").onclick=nextCard;$("#zahead").onclick=()=>{AHEAD=true;nextCard()};
 $("#zgame").onclick=()=>{if(!Z.c)return;const g=S.games.find(x=>x.id===Z.c.gid);if(!g)return;R.id=g.id;R.ply=Z.c.ply;show("review")};
 

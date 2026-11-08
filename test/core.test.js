@@ -84,6 +84,7 @@ test("analyzeGame: Patzer erkannt, Motiv, Karte, Varianten, Nachrechnung", async
   const r = await C.analyzeGame({ sans: MATE_GAME, me: "b" }, eng, 12, null, 18);
   assert.equal(r.cls[5], 3);
   assert.equal(r.mot["Matt zugelassen"], 1);
+  assert.deepEqual(r.ex, [{ m: "Matt zugelassen", ply: 5 }]);
   assert.equal(r.cards.length, 1);
   assert.equal(r.cards[0].best, "g6");
   assert.equal(r.cards[0].line, "3… g6 4. Bxf7+");
@@ -121,4 +122,14 @@ test("weaknesses, phaseAcc, openingStats", () => {
   assert.deepEqual(C.weaknesses(games), [["Figur eingestellt", 1.5], ["Zeitnot", 0.5]]);
   assert.deepEqual(C.phaseAcc(games), { o: 85, m: 65, e: 50 });
   assert.deepEqual(C.openingStats(games).w, [{ name: "Italian Game", n: 2, score: 50, acc: 70 }]);
+});
+
+test("OPENINGS: alle Zugfolgen legal, je 3 Vor- und Nachteile", () => {
+  const { OPENINGS } = require("../openings.js");
+  for (const [k, o] of Object.entries(OPENINGS)) {
+    const g = new Chess();
+    for (const m of o.m) assert.ok(g.move(m), `${k}: ${m}`);
+    assert.equal(o.p.length, 3, k); assert.equal(o.c.length, 3, k);
+    assert.ok(o.n && o.d && o.e, k);
+  }
 });
