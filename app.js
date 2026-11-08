@@ -138,43 +138,70 @@ function renderDash(){const d=day(),due=dueCards().length,G=S.games,w=weaknesses
  const ds=$("#dsync");if(ds)ds.onclick=()=>sync(true);const dO=$("#dopen");if(dO)dO.onclick=()=>{R.id=newest.id;R.ply=null;show("review")};const dS=$("#dset");if(dS)dS.onclick=()=>show("set")}
 
 // ---------- Review ----------
-let R={id:null,ply:0};
+let R={id:null,ply:0,v:null,pgn:false,f:{c:null,r:null,t:null}};
 function curGame(){return S.games.find(g=>g.id===R.id)}
 function fensOf(g){const b=new Chess(g.start),f=[b.fen()],mv=[];for(const s of g.sans){const m=b.move(s,{sloppy:true});mv.push(m);f.push(b.fen())}return{f,mv}}
 let RC=null;
-function renderReview(){const list=[...S.games].reverse();
- $("#glist").innerHTML=list.length?list.map(g=>`<button class="gitem ${g.id===R.id?"on":""}" data-id="${encodeURIComponent(g.id)}"><span>${g.white} – ${g.black}</span><span class="res${g.res===1?1:g.res===0?0:""}">${g.res===1?"Sieg":g.res===0?"Niederlage":g.res===.5?"Remis":"–"}</span><span class="muted">${g.date||""} · ${g.opening||(g.src==="local"?"vs. Stockfish":"")}</span><span class="muted">${g.acc??"–"} %</span></button>`).join(""):'<p class="muted">Noch keine Partien. Chess.com im Setup verbinden oder eine Partie spielen.</p>';
- document.querySelectorAll(".gitem").forEach(b=>b.onclick=()=>{R.id=decodeURIComponent(b.dataset.id);R.ply=null;renderReview();window.scrollTo({top:0,behavior:"smooth"})});
- const g=curGame();if(!g){if(list[0]&&R.id===null){R.id=list[0].id;R.ply=null;return renderReview()}drawBoard("rboard",new Chess(),"w",{});return}
+const esc=t=>String(t??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[c]);
+// Filter: Farbe, Ergebnis und Bedenkzeit kombinierbar, innerhalb einer Gruppe nur eine Auswahl
+const GF=[["all","Alle"],["c:w","Weiss"],["c:b","Schwarz"],["t:600","10 min"],["t:180","3 min"],["t:60","1 min"],["r:1","Sieg"],["r:0","Niederlage"]];
+function gFilter(g){const f=R.f;return(!f.c||g.me===f.c)&&(f.r==null||g.res===+f.r)&&(!f.t||baseTime(g.tc)===+f.t)}
+function tcLabel(g){const b=baseTime(g.tc);if(!b)return g.src==="local"?"vs. Stockfish":"";const inc=(g.tc||"").split("+")[1];return(b>=60?Math.round(b/60)+" min":b+" s")+(inc&&inc!=="0"?" +"+inc:"")}
+function renderList(){const all=[...S.games].reverse(),list=all.filter(gFilter),f=R.f;
+ $("#gfilter").innerHTML=GF.map(([k,l])=>{const on=k==="all"?!f.c&&f.r==null&&!f.t:f[k[0]]===k.slice(2);return`<button class="chip${on?" on":""}" data-k="${k}">${l}</button>`}).join("");
+ $("#gfilter").querySelectorAll(".chip").forEach(b=>b.onclick=()=>{const k=b.dataset.k;if(k==="all")R.f={c:null,r:null,t:null};else{const g=k[0],v=k.slice(2);R.f[g]=R.f[g]===v?null:v}renderList()});
+ $("#gcount").textContent=all.length?`${list.length} von ${all.length}`:"";
+ $("#glist").innerHTML=list.length?list.map(g=>{const opp=g.me==="w"?g.black:g.white,oe=g.me==="w"?g.bElo:g.wElo;
+  const rs=g.res===1?["S","win"]:g.res===0?["N","loss"]:g.res===.5?["R","draw"]:["–",""];
+  const meta=[`<i class="pcol ${g.me}"></i>${g.me==="w"?"Weiss":"Schwarz"}`,tcLabel(g),g.date?fmtD(g.date).slice(0,6):"",esc(g.opening||"")].filter(Boolean).join(" · ");
+  return`<button class="gitem${g.id===R.id?" on":""}" data-id="${encodeURIComponent(g.id)}"><span class="rb ${rs[1]}">${rs[0]}</span><span class="gm"><span class="gn">${esc(opp)}${oe?` <span class="muted">${oe}</span>`:""}</span><span class="gs">${meta}</span></span><span class="ga">${g.acc??"–"}<small> %</small></span></button>`}).join("")
+  :`<p class="muted" style="padding:12px 16px;margin:0">${all.length?"Keine Partie passt zum Filter.":"Noch keine Partien. Chess.com im Setup verbinden oder eine Partie spielen."}</p>`;
+ $("#glist").querySelectorAll(".gitem").forEach(b=>b.onclick=()=>{R.id=decodeURIComponent(b.dataset.id);R.ply=null;R.v=null;renderReview();window.scrollTo({top:0,behavior:"smooth"})})}
+// Variante (max. 6 Halbzüge) zum Durchspielen
+const sanList=t=>t?t.split(" ").filter(x=>x&&!/^\d+[.…]/.test(x)):[];
+function startVar(fen,line,kind,after){const c=new Chess(fen),fens=[fen],mv=[];for(const x of sanList(line).slice(0,6)){const m=c.move(x,{sloppy:true});if(!m)break;mv.push(m);fens.push(c.fen())}
+ if(mv.length){R.v={fens,mv,k:0,kind,after};renderReview()}}
+function step(d){if(R.v)R.v.k=d==="first"?0:d==="last"?1e9:R.v.k+d;else R.ply=d==="first"?0:d==="last"?1e9:R.ply+d;renderReview()}
+function renderReview(){renderList();
+ const list=[...S.games].reverse();const g=curGame();if(!g){if(list[0]&&R.id===null){R.id=list[0].id;R.ply=null;return renderReview()}drawBoard("rboard",new Chess(),"w",{});return}
  if(!S.seen[g.id]){S.seen[g.id]=1;day().rev++;save()}
  if(!RC||RC.id!==g.id)RC=Object.assign({id:g.id},fensOf(g));
  if(R.ply==null){const i=g.cls.findIndex((c,k)=>c>=2&&RC.mv[k].color===g.me);R.ply=i>=0?i:0}
  R.ply=Math.max(0,Math.min(RC.f.length-1,R.ply));const p=R.ply;const fen=RC.f[p];const nextMv=RC.mv[p];
+ $("#rtitle").textContent=`${g.white}${g.wElo?" ("+g.wElo+")":""} – ${g.black}${g.bElo?" ("+g.bElo+")":""}`;
+ const mist=[];g.cls.forEach((c,k)=>{if(c>=2&&RC.mv[k].color===g.me)mist.push(k)});
+ $("#rmist").innerHTML=mist.length?mist.map(k=>`<button data-k="${k}"${k===p&&!R.v?' class="on"':""}>${Math.floor(k/2)+1}${k%2?"…":"."} ${RC.mv[k].san}${MARK[g.cls[k]]}</button>`).join(""):'<p class="muted">Keine Fehler oder Patzer – stark.</p>';
+ $("#rmist").querySelectorAll("button").forEach(b=>b.onclick=()=>{R.ply=+b.dataset.k;R.v=null;renderReview()});
+ $("#rpgn").textContent=R.pgn?"PGN ausblenden":"PGN";$("#rmoves").hidden=!R.pgn;
+ if(R.pgn){let mh="";for(let i=0;i<RC.mv.length;i+=2){mh+=`<b>${i/2+1}.</b>`;for(const k of[i,i+1])mh+=RC.mv[k]?`<span data-k="${k+1}" class="c${g.cls[k]} ${p===k+1&&!R.v?"cur":""}">${RC.mv[k].san}${MARK[g.cls[k]]}</span>`:"<span></span>"}
+  $("#rmoves").innerHTML=mh;$("#rmoves").querySelectorAll("span[data-k]").forEach(x=>x.onclick=()=>{R.ply=+x.dataset.k;R.v=null;renderReview()});
+  const cur=$("#rmoves .cur"),box=$("#rmoves");if(cur)box.scrollTop=Math.max(0,cur.offsetTop-box.offsetTop-60)}
+ drawGraph(g,p);
+ if(R.v){const v=R.v;v.k=Math.max(0,Math.min(v.mv.length,v.k));const k=v.k,nx=v.mv[k];
+  drawBoard("rboard",new Chess(v.fens[k]),g.me,{last:k>0?{from:v.mv[k-1].from,to:v.mv[k-1].to}:null,arrows:nx?[{from:nx.from,to:nx.to,c:v.kind==="best"?GREEN:RED}]:[]});
+  $("#rply").textContent=`Variante · Zug ${k} von ${v.mv.length}`;
+  $("#rinfo").className="fb "+(v.kind==="best"?"good":"bad");
+  $("#rinfo").innerHTML=`<b>${v.kind==="best"?"Beste Fortsetzung":"Was nach "+esc(v.after)+" droht"}</b><div class="seq">${v.mv.map((m,i)=>`<span class="${i<k?"done":i===k?"nx":""}">${m.san}</span>`).join("")}</div><span class="muted">${k<v.mv.length?"Mit ▶ den nächsten Zug ausführen.":"Ende der Variante."}</span><div class="row"><button class="btn" id="rvback">Zurück zur Partie</button></div>`;
+  $("#rvback").onclick=()=>{R.v=null;renderReview()};return}
  const arrows=[];if(nextMv){arrows.push({from:nextMv.from,to:nextMv.to,c:GREY});if(g.best[p]&&g.best[p].slice(0,4)!==nextMv.from+nextMv.to)arrows.push(uciArrow(g.best[p],GREEN))}
  drawBoard("rboard",new Chess(fen),g.me,{last:p>0?{from:RC.mv[p-1].from,to:RC.mv[p-1].to}:null,arrows:arrows.filter(Boolean)});
  $("#rply").textContent=p===RC.f.length-1?"Endstellung":`Vor ${Math.floor(p/2)+1}${p%2?"…":"."} ${nextMv.san}`;
- $("#rtitle").textContent=`${g.white}${g.wElo?" ("+g.wElo+")":""} – ${g.black}${g.bElo?" ("+g.bElo+")":""}`;
  const motTxt=Object.entries(g.mot).map(([k,v])=>k+(v>1?" ×"+v:"")).join(", ")||"keine";
- let info=`Genauigkeit du ${g.acc??"–"} % · Gegner ${g.accOpp??"–"} %. Fehlerbilder: ${motTxt}.`;
- if(nextMv){const c=g.cls[p],mover=nextMv.color;const wb=mover==="w"?g.W[p]:100-g.W[p];
+ let info=`Genauigkeit: du ${g.acc??"–"} %, Gegner ${g.accOpp??"–"} %\nFehlerbilder: ${esc(motTxt)}`;
+ if(nextMv){const c=g.cls[p],mover=nextMv.color;const wb=mover==="w"?g.W[p]:100-g.W[p],wa=mover==="w"?g.W[p+1]:100-g.W[p+1];
   if(c>0){let bs="";try{const t=new Chess(fen);const bm=t.move({from:g.best[p].slice(0,2),to:g.best[p].slice(2,4),promotion:g.best[p][4]||"q"});bs=bm?bm.san:""}catch(e){}
-   info=`${["","Ungenauigkeit","Fehler","Patzer"][c]}: ${nextMv.san} (Gewinnchance ${Math.round(wb)} % → ${Math.round(mover==="w"?g.W[p+1]:100-g.W[p+1])} %). Grün: besser war ${bs}.`;
-   if(g.pv&&g.pv[p])info+=`\nBeste Fortsetzung: ${g.pv[p]}`;if(g.pv&&g.pv[p+1])info+=`\nNach ${nextMv.san} folgt: ${g.pv[p+1]}`}
-  else info+=` Grau: gespielter Zug${g.best[p]&&g.best[p].slice(0,4)!==nextMv.from+nextMv.to?", grün: Engine-Zug":""}.`}
- $("#rinfo").className="fb"+(nextMv&&g.cls[p]>=2?" bad":nextMv&&g.cls[p]===1?" warn":"");$("#rinfo").textContent=info;
- const mist=[];g.cls.forEach((c,k)=>{if(c>=2&&RC.mv[k].color===g.me)mist.push(k)});
- $("#rmist").innerHTML=mist.length?mist.map(k=>`<button data-k="${k}">${Math.floor(k/2)+1}${k%2?"…":"."} ${RC.mv[k].san}${["","?!","?","??"][g.cls[k]]}</button>`).join(""):'<p class="muted">Keine Fehler oder Patzer – stark.</p>';
- document.querySelectorAll("#rmist button").forEach(b=>b.onclick=()=>{R.ply=+b.dataset.k;renderReview()});
- let mh="";for(let i=0;i<RC.mv.length;i+=2){mh+=`<b>${i/2+1}.</b>`;for(const k of[i,i+1])mh+=RC.mv[k]?`<span data-k="${k+1}" class="c${g.cls[k]} ${p===k+1?"cur":""}">${RC.mv[k].san}${["","?!","?","??"][g.cls[k]]}</span>`:"<span></span>"}
- $("#rmoves").innerHTML=mh;document.querySelectorAll("#rmoves span[data-k]").forEach(s=>s.onclick=()=>{R.ply=+s.dataset.k;renderReview()});
- const cur=$("#rmoves .cur"),box=$("#rmoves");if(cur)box.scrollTop=Math.max(0,cur.offsetTop-box.offsetTop-60);
- drawGraph(g,p)}
+   info=`<b>${["","Ungenauigkeit","Fehler","Patzer"][c]}: ${nextMv.san}</b>\nGewinnchance ${Math.round(wb)} % → ${Math.round(wa)} %. Besser war <b>${bs}</b> (grüner Pfeil).`;
+   const b1=g.pv&&g.pv[p],b2=g.pv&&g.pv[p+1];
+   if(b1||b2)info+=`<div class="row">${b1?'<button class="btn" id="rvbest">▶ Beste Fortsetzung</button>':""}${b2?`<button class="btn" id="rvthreat">▶ Was nach ${nextMv.san} droht</button>`:""}</div>`}
+  else info+=`\nGrau: gespielter Zug${g.best[p]&&g.best[p].slice(0,4)!==nextMv.from+nextMv.to?", grün: Engine-Zug":""}.`}
+ $("#rinfo").className="fb"+(nextMv&&g.cls[p]>=2?" bad":nextMv&&g.cls[p]===1?" warn":"");$("#rinfo").innerHTML=info;
+ if($("#rvbest"))$("#rvbest").onclick=()=>startVar(fen,g.pv[p],"best");
+ if($("#rvthreat"))$("#rvthreat").onclick=()=>startVar(RC.f[p+1],g.pv[p+1],"threat",nextMv.san)}
 function drawGraph(g,p){const n=g.W.length,x=i=>n>1?i*300/(n-1):0,y=w=>100-w;const pts=g.W.map((w,i)=>x(i)+","+y(w)).join(" ");
  let dots="";g.cls.forEach((c,k)=>{if(c>=2){const mine=RC.mv[k].color===g.me;dots+=`<circle cx="${x(k+1)}" cy="${y(g.W[k+1])}" r="${mine?3.2:2.2}" fill="${c===3?RED:"#d39a4c"}" opacity="${mine?1:.5}"/>`}});
  $("#rgraph").innerHTML=`<polygon points="0,100 ${pts} 300,100" fill="var(--sq-l)"/><line x1="0" x2="300" y1="50" y2="50" stroke="var(--line)"/><polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="1.5" vector-effect="non-scaling-stroke"/><line x1="${x(p)}" x2="${x(p)}" y1="0" y2="100" stroke="var(--text)" stroke-width="1" vector-effect="non-scaling-stroke"/>${dots}`}
-$("#rgraph").addEventListener("pointerdown",e=>{const g=curGame();if(!g)return;const r=e.currentTarget.getBoundingClientRect();R.ply=Math.round((e.clientX-r.left)/r.width*(g.W.length-1));renderReview()});
-$("#rfirst").onclick=()=>{R.ply=0;renderReview()};$("#rprev").onclick=()=>{R.ply--;renderReview()};$("#rnext").onclick=()=>{R.ply++;renderReview()};$("#rlast").onclick=()=>{R.ply=1e9;renderReview()};
-document.addEventListener("keydown",e=>{if(VIEW!=="review"||e.target.tagName==="INPUT"||e.target.tagName==="TEXTAREA")return;if(e.key==="ArrowLeft"){R.ply--;renderReview()}if(e.key==="ArrowRight"){R.ply++;renderReview()}});
+$("#rfirst").onclick=()=>step("first");$("#rprev").onclick=()=>step(-1);$("#rnext").onclick=()=>step(1);$("#rlast").onclick=()=>step("last");$("#rpgn").onclick=()=>{R.pgn=!R.pgn;renderReview()};
+document.addEventListener("keydown",e=>{if(VIEW!=="review"||e.target.tagName==="INPUT"||e.target.tagName==="TEXTAREA")return;if(e.key==="ArrowLeft")step(-1);if(e.key==="ArrowRight")step(1)});
 
 // ---------- Spielen ----------
 let P=null;
